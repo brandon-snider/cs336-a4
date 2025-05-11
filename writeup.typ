@@ -95,6 +95,48 @@
 
 == Problem (`language_identification`): 6 points
 
++ See `cs336_data/language_identification.py`
+
++ If we're trying to train a model that performs well in a particular language, it would be highly problematic if, with high frequency, the language identifier (i) incorrecly classified other languages as the target language (ii) failed to recognize the target language. In the first case, the noisy data would prevent the model from learning the target language well. In the second case, the model might fail to be useful in some scenarios due to patchy understanding of the target language.
+
+  In a high stakes scenario, we could (1) tune two confidence thresholds, discarding very low-confidence predictions ($c < C_"min"$), flagging moderate-confidence predictions ($C_"min" <= c < C_"max"$) for human-in-the-loop review, and accepting high-confidence predictions ($C_"max" <= c$). We could periodically audit and recalibrate the classifier by sampling predictions on held-out data. We could also ensemble multiple language‐ID models or supplement fastText with rule-based checks (e.g., keyword lists or script detection) to further reduce systematic errors.
+
++ In a sample of \~27k documents, the classifier reports that 43% are in English.
+
+  The classifier seems to classify almost all documents in the same way that I would. However, when the classifier's score is low, the document often either (i) contains a mixture of languages (e.g. a restaurant menu with item names listed in English and Spanish), or (ii) is low-quality, containing a lot of random character strings, phone numbers, and the like. 
+
+  Examples of both (i) and (ii) are shown below.
+
+  From my observations, a threshold of \~0.85 would exclude the vast majority of ambiguous cases (no dominant language) and classification errors. The overwhelming majority of documents for which there is a clear correct classification have a score > 0.85, so we'd keep almost all high-quality documents, while discarding almost all others.
+
+  Example of (i) (multiple languages causing low score):
+
+  ```
+  {
+      "url": "https://grapevine.ca/listing/208-asper-trail-circle-ottawa-ontario-k2m-0k7-27802601/",
+      "lang": "en",
+      "score": 0.7182,
+      "snippet": "| 613.829.1000   • Home   • Sell     • For Sale By Owner     • Fully Brokered     • Compare Services   • Buy     • Get Cash Back     • Grapevine Listings     • Ottawa Listings   • About Us     • Our Company     • Our Realtors     • Contact Us   • Sold & Saved     • Recent Sales     • Testimonials   LOADING    • « Go back  208 Asper Trail Circle Ottawa, Ontario K2M 0K7  view favourites   • 208 Asper Trail Circle, Ottawa, Ontario K2M 0K7 - Photo 1 - X11923597   • 208 Asper Trail Circle, Ottawa, Ontario K2M 0K7 - Photo 2 - X11923597   • 208 Asper Trail Circle, Ottawa, Ontario K2M 0K7 - Photo 3 - X11923597   • 208 Asper Trail Circle, Ottawa, Ontario K2M 0K7 - Photo 4 - X11923597   • 208 Asper Trail Circle, Ottawa, Ontario K2M 0K7 - Photo 5 - X11923597   • 208 Asper Trail Circle, Ottawa, Ontario K2M 0K7 - Photo 6 - X11923597   • 208 Asper Trail Circle, Ottawa, Ontario K2M 0K7 - Photo 7 - X11923597   • 208 Asper Trail Circle, Ottawa, Ontario K2M 0K7 - Photo 8 - X11923597   • 208 Asper Trail "
+  },
+  ```
+
+  Example of (ii) (low-quality content causing low score):
+
+  ```
+  {
+      "url": "https://eventor.orientering.se/Ranking/ol/Event/Class/410195",
+      "lang": "sv",
+      "score": 0.7128,
+      "snippet": "• In English In English  Produkter och tjänster    • Förbundssida   • Livesida   • Omaps   • Livelox   • hitta orientering Svenska Orienteringsförbundet Eventor - Svensk orienterings centrala IT-system   • Tävlingskalender   • Sverigelistan   • Pressresultat   • Forum   • Skapa konto   • Logga in   • Orientering   • Skidorientering   • Tävlingar     • Gallringsfilter     • Utlandstävlingar     • Betala rankingavgift     • Subjektiv ansökan   • Köp klubblicens   • Support och kontakt   • Frågor och svar  Sverigelistan, skog  Hela landetDistriktvisKlubbvis (Uppdaterad 2025-04-17)  Alla damer  Alla herrar  D21D20D18 D16 D35D40D45D50D55D60D65D70D75D80D85D90D95  H21H20H18 H16 H35H40H45H50H55H60H65H70H75H80H85H90H95  Rankingfilter, skog  Hela landet (Uppdaterat fredag 2025-04-11)  D21D20D18  H21H20H18  Sverigelistan, sprint  Hela landet (Uppdaterad 2025-04-17)  Alla damer  Alla herrar  D21D20D18 D16 D35D40D45D50D55D60D65D70D75D80D85D90D95  H21H20H18 H16 H35H40H45H50H55H60H65H70H75H80H85H90H9"
+  }
+  ```
+
+== Problem (`mask_pii`): 3 points
+
++ TODO
+
++ TODO
+
 + TODO
 
 + TODO
