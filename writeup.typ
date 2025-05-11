@@ -133,12 +133,81 @@
 
 == Problem (`mask_pii`): 3 points
 
-+ TODO
++ See `cs336_data/mask_pii.py`
 
-+ TODO
++ See `cs336_data/mask_pii.py`
 
-+ TODO
++ See `cs336_data/mask_pii.py`
 
-+ TODO
++ Issues with false positives: the language model may learn erroneous patterns in where phone numbers, emails, or IPs naturally occur in text, and may produce generations with these placholders in locations that appear nonsensical to a user.
 
-+ TODO
+  Issues with false negatives: failure to mask some PII in the training set could cause the language model to output real PII in its generations.
+
+  Other issues: 
+  - The model may refuse to produce generations that contain PII-like patterns. For example, a user might provide their email signature (containing PII) to a model and ask it to compose emails on the user's behalf. The model might then output emails ending with that signature, but with the PII masked, which would be frustrating for the user.
+  - Not every email, phone number, or IP is PII that should be masked. For example, various helpline numbers or emails should probably not be masked.
+  - Distribution shift: replacing diverse PII with uniform placeholders may cause the model to learn unnatural patterns and overgenerate these tokens.
+
+  Mitigations:
+  - Manually maintain a whitelist of PII-like data that should not be masked.
+  - Use more structured or randomized placeholders (e.g. "|||EMAIL_ADDRESS_1|||" instead of "|||EMAIL_ADDRESS|||") to reduce the likelihood of overgeneration.
+
++ Some examples of false positives and false negatives are shown below.
+
+  In general, email masking seems to be much more reliable than phone number masking, due to the more consistent and easily detectable structure of email addresses. Given the diversity of phone number formats, there are cases in which it's almost impossible to tell whether or not a string is a phone number without deep contextual understanding. 
+
+  For example, in the first false positive listed below, a timestamp is masked as a phone number, simply because it's a string of digits of appropriate length. Only with some understanding of the surrounding context is this clear.
+
+  False positive (emails masked, phone numbers missed):
+
+  ```
+  {
+      "url": "http://indexrecruitment.com.np/testimonials",
+      "text": "  • Enquiry\n  • Apply Now\n+977-1-5911443 |||EMAIL_ADDRESS|||\n+977-1-5911443 |||EMAIL_ADDRESS|||\n  • Home\n  • About Us\n    • Introduction\n    • Mission\n    • Vision\n    • Our Team\n    • Testimonials\n  • Services\n  • Gallery\n  • Blogs\n  • Contact\n  • Facebook\n  • Instagram\n  • Twitter\n  • Youtube\n\nWhat People Say About Us\n\nPrakash Aryal\n\nSteel Bender\n\nI haven’t worked here long but I can say this is a great place to work the management is very helpful and understanding and helped me with getting my friend on board same schedule\n\nABOUT OUR CONSULTING\n\nIndex Recruitment Pvt. Ltd.\n\n+977-1-5911443 Link\n\nQuick Links\n\n  • Home\n  • Team\n  • Our Gallery\n  • Contact Us\n  • Book An Appointment\n\nNEWSLETTER\n\n\n\n\nDesign & Developed By Web House Nepal",
+      "emails_masked": 2,
+      "phone_numbers_masked": 0,
+      "ips_masked": 0,
+      "all_masked": 2
+  }  
+  ```
+
+  False negative (phone number missed):
+
+  ```
+  {
+      "url": "http://adobsicimahi.org/undangan-rapat-pengurus-2016/",
+      "text": "... Jenderal Achmad Yani (UNJANI)\nJl. Terusan Jenderal Gatot Subroto\nTelp. / Fax. |||PHONE_NUMBER|||\nHunting 0811 249 7890\n\n© 2016 ADOBSI.",
+      "emails_masked": 0,
+      "phone_numbers_masked": 1,
+      "ips_masked": 0,
+      "all_masked": 1
+  }
+  ```
+
+  False positive (timestamp masked as phone number):
+
+  ```
+  {
+      "url": "http://cdn.limetta.se/",
+      "original_text": "imgix Configuration Details\n\nLast Deployed\nTue Mar 25, 2025 10:45:18 PM UTC (1742942718)\nHash\n\"1563\"\n\nDashboard Website",
+      "text": "imgix Configuration Details\n\nLast Deployed\nTue Mar 25, 2025 10:45:18 PM UTC |||PHONE_NUMBER|||)\nHash\n\"1563\"\n\nDashboard Website",
+      "emails_masked": 0,
+      "phone_numbers_masked": 1,
+      "ips_masked": 0,
+      "all_masked": 1
+  }
+  ```
+
+  Arguably a false positive (placeholder data masked as PII):
+
+  ```
+  {
+      "url": "http://3rte.com.br/product/lixeira-com-tampa-35-litros-preta-plasvale/",
+      "original_text": "About\n  • Services\n  • Contact\n  • Shop\n  • Cart\n  • Checkout\n  • My account\nContact Us\n1, My Address, My Street, New York City, NY, USA\n+1234567890\ncontact@domain.com\n1234567890\n© 2022 3RTE | PopularFX Theme",
+      "text": "About\n  • Services\n  • Contact\n  • Shop\n  • Cart\n  • Checkout\n  • My account\nContact Us\n1, My Address, My Street, New York City, NY, USA\n+|||PHONE_NUMBER|||\n|||EMAIL_ADDRESS|||\n|||PHONE_NUMBER|||\n© 2022 3RTE | PopularFX Theme",
+      "emails_masked": 1,
+      "phone_numbers_masked": 2,
+      "ips_masked": 0,
+      "all_masked": 3
+  }
+  ```
