@@ -3,10 +3,11 @@ from __future__ import annotations
 import os
 from typing import Any
 
+from cs336_data.extract_text import extract_text_from_html_bytes
 
 
 def run_extract_text_from_html_bytes(html_bytes: bytes) -> str | None:
-    raise NotImplementedError
+    return extract_text_from_html_bytes(html_bytes)
 
 
 def run_identify_language(text: str) -> tuple[Any, float]:
@@ -41,9 +42,7 @@ def run_gopher_quality_filter(text: str) -> bool:
     raise NotImplementedError
 
 
-def run_exact_line_deduplication(
-    input_files: list[os.PathLike], output_directory: os.PathLike
-):
+def run_exact_line_deduplication(input_files: list[os.PathLike], output_directory: os.PathLike):
     raise NotImplementedError
 
 
