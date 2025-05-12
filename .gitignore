@@ -1,6 +1,11 @@
 CC-MAIN-2023-50/
 *.bin
 
+*.err
+*.out
+
+out/
+
 nav
 tags
 data/

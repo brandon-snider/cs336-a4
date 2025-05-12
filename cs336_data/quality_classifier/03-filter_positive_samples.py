@@ -64,8 +64,6 @@ def main():
 
             total_docs += 1
 
-            print(text[:100])
-
             # Classify every document
             lang, score = identify_language(text)
 
@@ -74,12 +72,12 @@ def main():
                 continue
 
             nsfw_label, nsfw_conf = classify_nsfw(text)
-            if nsfw_label == "nsfw":
+            if nsfw_label == "nsfw" or (nsfw_label == "non-nsfw" and nsfw_conf < 0.9):
                 rejected_docs["nsfw"] += 1
                 continue
 
             toxic_label, toxic_conf = classify_toxic_speech(text)
-            if toxic_label == "toxic":
+            if toxic_label == "toxic" or (toxic_label == "non-toxic" and toxic_conf < 0.9):
                 rejected_docs["toxic"] += 1
                 continue
 

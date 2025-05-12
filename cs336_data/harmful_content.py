@@ -2,8 +2,8 @@ import os
 
 import fasttext
 
-NSFW_MODEL_NAME = "dolma-jigsaw-fasttext-bigrams-nsfw.bin"
-TOXIC_MODEL_NAME = "dolma-jigsaw-fasttext-bigrams-hatespeech.bin"
+NSFW_MODEL_NAME = "dolma_fasttext_nsfw_jigsaw_model.bin"
+TOXIC_MODEL_NAME = "dolma_fasttext_hatespeech_jigsaw_model.bin"
 
 MODEL_PATHS = ["/data/classifiers", "../classifiers"]
 
