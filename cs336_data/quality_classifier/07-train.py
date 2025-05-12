@@ -5,7 +5,7 @@ def main():
     model = fasttext.train_supervised(
         input="data/wiki/quality.train",
         epoch=30,
-        lr=1.0,
+        lr=0.2,
         # loss="hs",
         # wordNgrams=3,
     )
