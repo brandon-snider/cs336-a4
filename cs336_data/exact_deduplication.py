@@ -24,11 +24,7 @@ def exact_line_dedupe(input_files: list[os.PathLike], output_directory: os.PathL
             with open(os.path.join(output_directory, file_name), "w") as f_out:
                 for line in f:
                     line_hash = mmh3.hash(line)
-                    if (
-                        unique_lines[line_hash]["count"] > 1
-                        or unique_lines[line_hash]["written"]
-                        or unique_lines[line_hash]["first_file"] != file_name
-                    ):
+                    if unique_lines[line_hash]["count"] > 1 or unique_lines[line_hash]["first_file"] != file_name:
                         continue
 
                     unique_lines[line_hash]["written"] = True
