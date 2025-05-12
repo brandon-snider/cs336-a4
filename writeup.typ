@@ -287,3 +287,8 @@
 
   https://www.hji.edu/being-a-peacemaker-leadership-series-event/
 
+== Problem (`quality_classifier`): 15 points
+
++ See `cs336_data/quality_classifier.py`
+
++ See `cs336_data/quality_classifier.py`
