@@ -10,6 +10,7 @@ from cs336_data.mask_pii import mask_emails, mask_phone_numbers, mask_ips
 from cs336_data.harmful_content import classify_nsfw, classify_toxic_speech
 from cs336_data.quality_classifier.quality_classifier import classify_quality
 from cs336_data.gopher_quality_filters import gopher_quality_filter
+from cs336_data.minhash_deduplication import minhash_dedupe
 
 
 def run_extract_text_from_html_bytes(html_bytes: bytes) -> str | None:
@@ -60,4 +61,4 @@ def run_minhash_deduplication(
     jaccard_threshold: float,
     output_directory: os.PathLike,
 ):
-    raise NotImplementedError
+    return minhash_dedupe(input_files, num_hashes, num_bands, ngrams, jaccard_threshold, output_directory)
