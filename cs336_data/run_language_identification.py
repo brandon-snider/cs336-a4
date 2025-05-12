@@ -17,7 +17,9 @@ from warcio.archiveiterator import ArchiveIterator
 from cs336_data.extract_text import extract_text_from_html_bytes
 from cs336_data.language_identification import identify_language
 
-DEFAULT_WARC_PATH = "/data/CC/example.warc.gz"
+DEFAULT_WARC_PATH = (
+    "/data/CC/example.warc.gz" if os.path.exists("/data/CC/example.warc.gz") else "data/CC/example.warc.gz"
+)
 
 
 def main():
