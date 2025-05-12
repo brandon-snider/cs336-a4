@@ -267,6 +267,23 @@
 
 == Problem (`gopher_quality_filters`): 3 points
 
-+ TODO
++ See `cs336_data/gopher_quality_filters.py`
 
-+ TODO
++ On a sample of 26,820 documents, 7,362 passed the quality filters (27.45%). 
+
+  I generally found high agreement between the quality filters and my own judgement.
+
+  Cases of mild disagreement:
+  
+  There were instances in which the filters rejected documents that I might have kept, like the following product page: https://www.footballgiftsonline.co.uk/products/everton-pulse-double-duvet-set. There's certainly high-quality training data on this page, but perhaps if we're only applying filters at the page level (rather than trying to extract the prose from the page), perhaps discarding it is more reasonable.
+
+  It's not obvious though, why that product page was filtered out, but this one was not: https://www.dshirt14.it/en/t-shirt/6988-T-shirt-Kids-Pop-Origami-Scottish-Terrier.html. If anything the former appears more useful as training data, though neither is particularly dense with worthwhile text, so perhaps with page-level filtering both should be discarded.
+
+  There were may such cases of ecommerce-related pages that seem to be close to the boundary, as it's not clear why some are kept and other aren't.
+
+  Case of strong disagreement:
+
+  Though rare, there were a few cases, such as the one below, where I certainly would have kept a page that the filters rejected. Below is one example:
+
+  https://www.hji.edu/being-a-peacemaker-leadership-series-event/
+
