@@ -62,7 +62,7 @@ def minhash_dedupe(
     # Index of minhash band -> list of filepaths with a matching band
     bands: dict[tuple[int, ...], list[os.PathLike]] = {}
 
-    # set of pairs of filenames of files that are candidate duplicates based on minhash bands
+    # Set of pairs of filenames of files that are candidate duplicates based on minhash bands
     candidate_dups: set[tuple[os.PathLike, os.PathLike]] = set()
 
     hash_functions = get_hash_functions(num_hashes)
@@ -99,11 +99,13 @@ def minhash_dedupe(
                 clusters[f2] = clusters[f1]
             clusters[f1].add(f2)
 
+    # Set of clusters of duplicates
     cluster_set: set[frozenset[os.PathLike]] = set()
 
     for cluster in clusters.values():
         cluster_set.add(frozenset(cluster))
 
+    # List of output files: unique files, and one at random from each cluster of duplicates
     files_to_write: list[os.PathLike] = []
 
     for file in input_files:
