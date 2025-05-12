@@ -211,3 +211,62 @@
       "all_masked": 3
   }
   ```
+
+== Problem (`harmful_content`): 6 points
+
++ See `cs336_data/harmful_content.py`
+
++ See `cs336_data/harmful_content.py`
+
++ Issues:
+
+  Naive application of these filters could skew the training distribution. For example, though we may no longer use this language, it may be useful for a model to understand what a master-slave relationship refers to in a CS context. We may also lose culturally significant language that includes borderline profanity, but may be important for a model to understand. The classifiers may also simply produce false positives (removing benign content) and false negatives (retaining harmful content).
+
+  Mitigations:
+  - Calibrate confidence thresholds on manually vetted samples.
+  - Use soft filtering or example reweighting rather than outright removal.
+  - Incorporate periodic human-in-the-loop audits to refine classifier boundaries.
+
++ Examples of false positives and false negatives are shown below.
+
+  In a collection of 26,820 documents, 72 were classified as NSFW (0.27%) and 224 were classified as toxic (0.84%).
+
+  In general, finding an example of a false positive is much more difficult than finding a false negative, particularly for the NSFW classifier, for which there were many false negatives and almost no false positives. 
+
+  No choice of thresholds will be perfect, because the classifiers' scores are very much imperfect (see the second example below, about which the NSFW classifier reports extremely high confidence for "non-NSFW").
+  
+  It seems high thresholds (e.g. requiring >0.9 for a "non-NSFW" or "non-toxic" classification) would be reasonable, given the rarity of false positives and frequency of false negatives, even when the classifier reports high confidence for the "non-NSFW" or "non-toxic" classification. Though this is subjective, there is probably some asymmetry here in that a small number of false negatives is likely much more harmful than a small number of false positives.
+
+  When the classifiers are used together, it appears that a 0.9 threshold appears would catch a high proportion of all harmful content. For example, although the first example below should be classified as NSFW but isn't, it _is_ classified as toxic, and therefore would be removed.
+
+  False positive (toxic):
+
+  ```
+  {
+      "url": "http://www.w3schools.com/python/trypython.asp?filename=demo_default",
+      "nsfw": "non-nsfw",
+      "nsfw_score": 0.9975,
+      "toxic": "toxic",
+      "toxic_score": 0.7668,
+      "snippet": "Get your own Python server ❯Run Code Ctrl+Alt+R Change Orientation Ctrl+Alt+O Change Theme Ctrl+Alt+D Go to Spaces Ctrl+Alt+P  Privacy policy and Copyright 1999-2025  Hello, World!"
+  }
+  ```
+
+  False negative (should be NSFW; many such cases):
+
+  ```
+  {
+      "url": "https://amaturepornmaster.com/homemade-porn-videos/cheerleader/",
+      "nsfw": "non-nsfw",
+      "nsfw_score": 0.9845,
+      "toxic": "toxic",
+      "toxic_score": 0.8715,
+      "snippet": "Free Sextapes Porn Videos And HQ Home XXX Films Only On Amaturepornmaster.Com   • Top videos   • New videos   • All Models   • All Niches  Real Life Porn Tubes  Trinity Does What It Takes - Trinity May Trinity Does What It Takes - Trinity May Candice Delaware In Exotic Xxx Movie Upskirt Watch , Its Amazing Candice Delaware In Exotic Xxx Movie Upskirt Watch , Its Amazing From To Cum Dumpster - Scarlett Mae From To Cum Dumpster - Scarlett Mae Raising Your Spirit With Nia Nacci Raising Your Spirit With Nia Nacci Big Butt Cheerleader Does Splits On The Dick - Belle Sparkles Big Butt Cheerleader Does Splits On The Dick - Belle Sparkles Beach Blonde Cheerleader Paisley Porter Takes That Huge Prick Deep Into Her Tight Vagina Beach Blonde Cheerleader Paisley Porter Takes That Huge Prick Deep Into Her Tight Vagina Crazy Porn Movie Big Tits Watch , It's Amazing Crazy Porn Movie Big Tits Watch , It's Amazing Jazzi Lai - Black Cheerleader Gang 26 Jazzi Lai - Black Cheerleader Gang 26 A Petite With"
+  }
+  ```
+
+== Problem (`gopher_quality_filters`): 3 points
+
++ TODO
+
++ TODO
