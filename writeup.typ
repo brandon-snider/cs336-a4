@@ -107,7 +107,7 @@
 
   Examples of both (i) and (ii) are shown below.
 
-  From my observations, a threshold of \~0.85 would exclude the vast majority of ambiguous cases (no dominant language) and classification errors. The overwhelming majority of documents for which there is a clear correct classification have a score > 0.85, so we'd keep almost all high-quality documents, while discarding almost all others.
+  From my observations, a threshold of \~0.8 would exclude the vast majority of ambiguous cases (no dominant language) and classification errors. The overwhelming majority of documents for which there is a clear correct classification have a score > 0.8, so we'd keep almost all high-quality documents, while discarding almost all others.
 
   Example of (i) (multiple languages causing low score):
 

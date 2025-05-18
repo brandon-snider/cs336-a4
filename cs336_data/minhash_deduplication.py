@@ -1,10 +1,17 @@
+from concurrent.futures import ProcessPoolExecutor, as_completed
+from functools import partial
 import os
 import random
 import re
-from collections.abc import Callable
 import shutil
-import unicodedata
 import mmh3
+import numpy as np
+import unicodedata
+import pickle
+from tqdm import tqdm
+
+WS_RE = re.compile(r"\s+")
+PUNCT_RE = re.compile(r"[^\w\s]")
 
 
 def normalize_text(text: str) -> str:
@@ -16,25 +23,20 @@ def normalize_text(text: str) -> str:
     - Applying NFD unicode normalization
     """
     text = text.lower()
-    text = re.sub(r"[^\w\s]", "", text)
-    text = re.sub(r"\s+", " ", text)
+    text = PUNCT_RE.sub(" ", text)
+    text = WS_RE.sub(" ", text).strip()
     text = unicodedata.normalize("NFD", text)
     return text
 
 
-def get_hash_function(seed: int):
-    def func(text: str):
-        return mmh3.hash(text, seed)
+def get_minhash(ngram_set: set[str], num_perm: int) -> list[int]:
+    seeds = np.arange(num_perm, dtype=np.uint32)
+    mins = np.full(num_perm, np.iinfo(np.uint32).max, dtype=np.uint32)
 
-    return func
-
-
-def get_hash_functions(num_hashes: int):
-    return [get_hash_function(i) for i in range(num_hashes)]
-
-
-def get_minhash(ngram_set: set[str], hash_functions: list[Callable[[str], int]]):
-    return [min(hash_function(ngram) for ngram in ngram_set) for hash_function in hash_functions]
+    for ngram in ngram_set:
+        h = mmh3.hash(ngram, signed=False)
+        mins[:] = np.minimum(mins, h ^ seeds)
+    return mins.tolist()
 
 
 def get_ngram_set(text: str, ngrams: int):
@@ -43,9 +45,55 @@ def get_ngram_set(text: str, ngrams: int):
 
 
 def get_file_normalized_ngram_set(file: os.PathLike, ngrams: int):
-    with open(file) as f:
+    with open(file, encoding="utf-8", errors="ignore") as f:
         text = f.read()
     return get_ngram_set(normalize_text(text), ngrams)
+
+
+def build_signature(path: os.PathLike, *, ngrams: int, num_hashes: int):
+    ngram_set = get_file_normalized_ngram_set(path, ngrams)
+    return path, get_minhash(ngram_set, num_hashes)
+
+
+def collect_signatures(
+    input_files: list[os.PathLike],
+    *,
+    ngrams: int,
+    num_hashes: int,
+    jobs: int | None = None,
+    progress: bool = False,
+):
+    jobs = jobs or os.cpu_count()
+    with ProcessPoolExecutor(max_workers=jobs) as pool:
+        submit = partial(pool.submit, build_signature, ngrams=ngrams, num_hashes=num_hashes)
+
+        futures = [submit(p) for p in input_files]
+
+        for future in tqdm(as_completed(futures), total=len(futures), disable=not progress, desc="Building signatures"):
+            yield future.result()
+
+
+def build_ngram_set(path: os.PathLike, *, ngrams: int):
+    """Compute and return the normalized n‑gram set for a single file."""
+    return path, get_file_normalized_ngram_set(path, ngrams)
+
+
+def collect_ngram_sets(
+    files: set[os.PathLike],
+    *,
+    ngrams: int,
+    jobs: int | None = None,
+    progress: bool = False,
+):
+    """Parallel map: file → n‑gram set. Yields (path, set) tuples."""
+    jobs = jobs or os.cpu_count()
+    with ProcessPoolExecutor(max_workers=jobs) as pool:
+        submit = partial(pool.submit, build_ngram_set, ngrams=ngrams)
+        futures = [submit(p) for p in files]
+        for future in tqdm(
+            as_completed(futures), total=len(futures), disable=not progress, desc="Building n‑gram sets"
+        ):
+            yield future.result()
 
 
 def minhash_dedupe(
@@ -55,6 +103,9 @@ def minhash_dedupe(
     ngrams: int,
     jaccard_threshold: float,
     output_directory: os.PathLike,
+    progress: bool = False,
+    signatures_inpath: os.PathLike | None = None,
+    signatures_outpath: os.PathLike | None = None,
 ):
     if not os.path.exists(output_directory):
         os.makedirs(output_directory)
@@ -65,12 +116,19 @@ def minhash_dedupe(
     # Set of pairs of filenames of files that are candidate duplicates based on minhash bands
     candidate_dups: set[tuple[os.PathLike, os.PathLike]] = set()
 
-    hash_functions = get_hash_functions(num_hashes)
+    if signatures_inpath is not None and os.path.exists(signatures_inpath):
+        with open(signatures_inpath, "rb") as f:
+            signatures = pickle.load(f)
+        print(f"Loaded {len(signatures)} signatures from {signatures_inpath}")
+    else:
+        signatures = list(collect_signatures(input_files, ngrams=ngrams, num_hashes=num_hashes, progress=progress))
 
-    for file in input_files:
-        ngram_set = get_file_normalized_ngram_set(file, ngrams)
-        minhash = get_minhash(ngram_set, hash_functions)
+        if signatures_outpath is not None:
+            with open(signatures_outpath, "wb") as f:
+                pickle.dump(signatures, f)
+            print(f"Dumped {len(signatures)} signatures to {signatures_outpath}")
 
+    for file, minhash in signatures:
         for band in range(num_bands):
             band_minhash = tuple(minhash[band::num_bands])
             if band_minhash not in bands:
@@ -81,16 +139,19 @@ def minhash_dedupe(
                 if other_file != file:
                     candidate_dups.add((file, other_file))
 
+    if progress:
+        print(f"Will test + cluster {len(candidate_dups)} candidate duplicates")
+
+    unique_files = {f for pair in candidate_dups for f in pair}
+    ngram_sets = dict(collect_ngram_sets(unique_files, ngrams=ngrams, progress=progress))
+
     # Map from filepath -> set of files that are in the same cluster of duplicates
     clusters: dict[os.PathLike, set[os.PathLike]] = {}
 
-    for candidate_dup in candidate_dups:
-        f1, f2 = candidate_dup
+    for f1, f2 in tqdm(candidate_dups, disable=not progress, desc="Test + cluster candidate dupes"):
+        s1, s2 = ngram_sets[f1], ngram_sets[f2]
 
-        ngram_set_1 = get_file_normalized_ngram_set(f1, ngrams)
-        ngram_set_2 = get_file_normalized_ngram_set(f2, ngrams)
-
-        jaccard_similarity = len(ngram_set_1.intersection(ngram_set_2)) / len(ngram_set_1.union(ngram_set_2))
+        jaccard_similarity = len(s1 & s2) / len(s1 | s2)
 
         if jaccard_similarity >= jaccard_threshold:
             if f1 not in clusters:
@@ -100,24 +161,13 @@ def minhash_dedupe(
             clusters[f1].add(f2)
 
     # Set of clusters of duplicates
-    cluster_set: set[frozenset[os.PathLike]] = set()
-
-    for cluster in clusters.values():
-        cluster_set.add(frozenset(cluster))
+    cluster_set: set[frozenset[os.PathLike]] = {frozenset(cluster) for cluster in clusters.values()}
 
     # List of output files: unique files, and one at random from each cluster of duplicates
-    files_to_write: list[os.PathLike] = []
-
-    for file in input_files:
-        if file not in clusters:
-            # File is not in a cluster, so it is a non-duplicate
-            files_to_write.append(file)
-
+    files_to_write: list[os.PathLike] = [f for f in input_files if f not in clusters]
     for cluster in cluster_set:
-        # Pick a random file from a cluster of duplicates
-        random_file = random.choice(list(cluster))
-        files_to_write.append(random_file)
+        files_to_write.append(random.choice(list(cluster)))
 
-    for file in files_to_write:
+    for file in tqdm(files_to_write, disable=not progress, desc="Writing output files"):
         dst = os.path.join(output_directory, os.path.basename(file))
         shutil.copy2(file, dst)

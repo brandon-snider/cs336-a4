@@ -1,10 +1,11 @@
 import os
 import mmh3
+from tqdm import tqdm
 
 
-def exact_line_dedupe(input_files: list[os.PathLike], output_directory: os.PathLike):
+def exact_line_dedupe(input_files: list[os.PathLike], output_directory: os.PathLike, progress: bool = False):
     unique_lines = {}
-    for file in input_files:
+    for file in tqdm(input_files, disable=not progress, desc="Indexing files"):
         file_name = os.path.basename(file)
 
         with open(file) as f:
@@ -18,7 +19,7 @@ def exact_line_dedupe(input_files: list[os.PathLike], output_directory: os.PathL
                     }
                 unique_lines[line_hash]["count"] += 1
 
-    for file in input_files:
+    for file in tqdm(input_files, disable=not progress, desc="Writing output files"):
         file_name = os.path.basename(file)
         with open(file) as f:
             with open(os.path.join(output_directory, file_name), "w") as f_out:
