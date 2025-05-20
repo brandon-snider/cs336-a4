@@ -1,5 +1,5 @@
 import os
-from cs336_data.minhash_deduplication import minhash_dedupe
+from cs336_data.minhash_deduplication_parallel import minhash_dedupe
 import time
 
 DATA_DIR = "/data/c-sniderb/a4-leaderboard/deduped"
@@ -9,6 +9,8 @@ OUTDIR = "/data/c-sniderb/a4-leaderboard/near-deduped"
 def main(data_dir: str = DATA_DIR, outdir: str = OUTDIR):
     t0 = time.time()
 
+    print(os.cpu_count())
+
     # Create outdir if it doesn't exist
     os.makedirs(outdir, exist_ok=True)
 
@@ -17,7 +19,7 @@ def main(data_dir: str = DATA_DIR, outdir: str = OUTDIR):
     # Get all wet files that have a meta file
     wet_filepaths = [os.path.join(data_dir, f) for f in files if f.endswith(".warc.wet.gz")]
 
-    # wet_filepaths = wet_filepaths[3000:]
+    # wet_filepaths = wet_filepaths[:190]
 
     print(f"Near-deduping {len(wet_filepaths)} files")
 

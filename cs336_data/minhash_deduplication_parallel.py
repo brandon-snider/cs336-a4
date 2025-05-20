@@ -10,6 +10,7 @@ import mmh3
 import numpy as np
 import unicodedata
 import pickle
+import submitit
 from tqdm import tqdm
 
 WS_RE = re.compile(r"\s+")
@@ -80,22 +81,53 @@ def build_ngram_set(path: os.PathLike, *, ngrams: int):
     return path, get_file_normalized_ngram_set(path, ngrams)
 
 
-def collect_ngram_sets(
-    files: set[os.PathLike],
-    *,
-    ngrams: int,
-    jobs: int | None = None,
-    progress: bool = False,
-):
-    """Parallel map: file → n‑gram set. Yields (path, set) tuples."""
-    jobs = jobs or os.cpu_count()
-    with ProcessPoolExecutor(max_workers=jobs) as pool:
-        submit = partial(pool.submit, build_ngram_set, ngrams=ngrams)
-        futures = [submit(p) for p in files]
-        for future in tqdm(
-            as_completed(futures), total=len(futures), disable=not progress, desc="Building n‑gram sets"
-        ):
-            yield future.result()
+def collect_ngram_sets(files: set[os.PathLike], ngrams: int, progress: bool = False):
+    executor = submitit.AutoExecutor(folder="/data/c-sniderb/a4-leaderboard/slurm_logs")
+    max_simultaneous_jobs = 64
+
+    executor.update_parameters(
+        slurm_array_parallelism=max_simultaneous_jobs,
+        timeout_min=5,
+        mem_gb=2,
+        cpus_per_task=1,
+        slurm_account="student",
+        slurm_partition="a4-cpu",
+        slurm_qos="a4-cpu-qos",
+    )
+
+    futures = []
+    results = {}
+
+    with executor.batch():
+        for file in files:
+            future = executor.submit(build_ngram_set, file, ngrams=ngrams)
+            futures.append(future)
+
+    for future in tqdm(
+        submitit.helpers.as_completed(futures), total=len(futures), disable=not progress, desc="Building n‑gram sets"
+    ):
+        path, ngram_set = future.result()
+        results[path] = ngram_set
+
+    return results
+
+
+# def collect_ngram_sets(
+#     files: set[os.PathLike],
+#     *,
+#     ngrams: int,
+#     jobs: int | None = None,
+#     progress: bool = False,
+# ):
+#     """Parallel map: file → n‑gram set. Yields (path, set) tuples."""
+#     jobs = jobs or os.cpu_count()
+#     with ProcessPoolExecutor(max_workers=jobs) as pool:
+#         submit = partial(pool.submit, build_ngram_set, ngrams=ngrams)
+#         futures = [submit(p) for p in files]
+#         for future in tqdm(
+#             as_completed(futures), total=len(futures), disable=not progress, desc="Building n‑gram sets"
+#         ):
+#             yield future.result()
 
 
 def minhash_dedupe(
@@ -106,7 +138,7 @@ def minhash_dedupe(
     jaccard_threshold: float,
     output_directory: os.PathLike,
     progress: bool = False,
-    batch_pairs: int = 6000,
+    batch_pairs: int = 10000,
     cache_size: int = 3000,
     signatures_inpath: os.PathLike | None = None,
     signatures_outpath: os.PathLike | None = None,
