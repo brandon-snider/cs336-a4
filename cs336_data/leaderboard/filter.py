@@ -88,7 +88,13 @@ def process_wet_file(input_path: str, output_path: str, progress: bool = False):
     return output_path, meta_outpath, short_meta
 
 
-def main(max_files: int = None, single: bool = False, outdir: str = OUTDIR, data_dir: str = DATA_DIR):
+def main(
+    max_files: int = None,
+    single: bool = False,
+    outdir: str = OUTDIR,
+    data_dir: str = DATA_DIR,
+    wait: bool = True,
+):
     # random.seed(42)
 
     # Set up the executor
@@ -100,19 +106,27 @@ def main(max_files: int = None, single: bool = False, outdir: str = OUTDIR, data
 
     wet_filepaths = []
     for wfp in all_wet_filepaths:
-        if not os.path.exists(os.path.join(outdir, str(pathlib.Path(wfp).name))):
+        outpath = os.path.join(outdir, str(pathlib.Path(wfp).name))
+        reservation_path = outpath + ".reservation.txt"
+        if not os.path.exists(outpath) and not os.path.exists(reservation_path):
             wet_filepaths.append(wfp)
 
     if max_files is not None:
         random.shuffle(wet_filepaths)
         wet_filepaths = wet_filepaths[:max_files]
 
+    for wfp in wet_filepaths:
+        reservation_path = os.path.join(outdir, str(pathlib.Path(wfp).name)) + ".reservation.txt"
+        if not os.path.exists(reservation_path):
+            with open(reservation_path, "w") as f:
+                f.write("1")
+
     outdir_path = outdir
 
     if not single:
         executor.update_parameters(
             slurm_array_parallelism=max_simultaneous_jobs,
-            timeout_min=5,
+            timeout_min=10,
             mem_gb=2,
             cpus_per_task=1,
             slurm_account="student",
@@ -128,15 +142,16 @@ def main(max_files: int = None, single: bool = False, outdir: str = OUTDIR, data
                 future = executor.submit(process_wet_file, wfp, os.path.join(outdir_path, wet_filename))
                 futures.append(future)
 
-        # Iterate over completed futures as they finish, using a progress bar to keep track
-        for future in tqdm(
-            submitit.helpers.as_completed(futures),
-            total=len(wet_filepaths),
-        ):
-            output_file, meta_outpath, short_meta = future.result()
-            # print(f"Output file written: {output_file}")
-            # print(f"Meta file written: {meta_outpath}")
-            # print(f"Short Meta: {short_meta}")
+        if wait:
+            # Iterate over completed futures as they finish, using a progress bar to keep track
+            for future in tqdm(
+                submitit.helpers.as_completed(futures),
+                total=len(wet_filepaths),
+            ):
+                output_file, meta_outpath, short_meta = future.result()
+                # print(f"Output file written: {output_file}")
+                # print(f"Meta file written: {meta_outpath}")
+                # print(f"Short Meta: {short_meta}")
     else:
         for wfp in tqdm(wet_filepaths, total=len(wet_filepaths)):
             output_file, meta_outpath, short_meta = process_wet_file(
@@ -153,6 +168,15 @@ if __name__ == "__main__":
     parser.add_argument("--single", action="store_true", help="Whether to use a single thread")
     parser.add_argument("--out-dir", type=str, default=OUTDIR, help="Output directory")
     parser.add_argument("--data-dir", type=str, default=DATA_DIR, help="Data directory")
+    parser.add_argument("--no-wait", action="store_true", help="Whether to wait for the jobs to finish")
     args = parser.parse_args()
 
-    main(max_files=args.max_files, single=args.single, outdir=args.out_dir, data_dir=args.data_dir)
+    wait = not args.no_wait
+
+    main(
+        max_files=args.max_files,
+        single=args.single,
+        outdir=args.out_dir,
+        data_dir=args.data_dir,
+        wait=wait,
+    )

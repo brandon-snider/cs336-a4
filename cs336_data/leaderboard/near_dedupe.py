@@ -3,10 +3,11 @@ from cs336_data.minhash_deduplication_parallel import minhash_dedupe
 import time
 
 DATA_DIR = "/data/c-sniderb/a4-leaderboard/deduped"
+NGRAM_CACHE_DIR = "/data/c-sniderb/a4-leaderboard/near-deduped/ngram-sets"
 OUTDIR = "/data/c-sniderb/a4-leaderboard/near-deduped"
 
 
-def main(data_dir: str = DATA_DIR, outdir: str = OUTDIR):
+def main(data_dir: str = DATA_DIR, outdir: str = OUTDIR, ngram_cache_dir: str = NGRAM_CACHE_DIR):
     t0 = time.time()
 
     print(os.cpu_count())
@@ -33,6 +34,7 @@ def main(data_dir: str = DATA_DIR, outdir: str = OUTDIR):
         progress=True,
         signatures_inpath=os.path.join(outdir, "signatures.pkl"),
         signatures_outpath=os.path.join(outdir, "signatures.pkl"),
+        ngram_cache_dir=ngram_cache_dir,
     )
 
     print(f"Near-deduped {len(wet_filepaths)} files in {time.time() - t0} seconds")

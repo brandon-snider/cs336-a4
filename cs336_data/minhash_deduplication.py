@@ -6,6 +6,7 @@ import os
 import random
 import re
 import shutil
+import time
 import mmh3
 import numpy as np
 import unicodedata
@@ -106,10 +107,10 @@ def minhash_dedupe(
     jaccard_threshold: float,
     output_directory: os.PathLike,
     progress: bool = False,
-    batch_pairs: int = 6000,
     cache_size: int = 3000,
     signatures_inpath: os.PathLike | None = None,
     signatures_outpath: os.PathLike | None = None,
+    ngram_cache_dir: os.PathLike | None = None,
 ):
     if not os.path.exists(output_directory):
         os.makedirs(output_directory)
@@ -150,51 +151,50 @@ def minhash_dedupe(
     clusters: dict[os.PathLike, set[os.PathLike]] = {}
     ngram_cache: OrderedDict[os.PathLike, set[str]] = OrderedDict()
 
-    pairs_list = sorted(candidate_dups)
+    def load_ngram_set(filepath: os.PathLike):
+        filename = os.path.basename(filepath)
+        ngram_set = None
+        inpath = None if ngram_cache_dir is None else os.path.join(ngram_cache_dir, filename + ".pkl")
 
-    for start in tqdm(
-        range(0, len(pairs_list), batch_pairs), desc="Testing + clustering candidate dupes", disable=not progress
-    ):
-        chunk = pairs_list[start : start + batch_pairs]
-        files_needed = {f for pair in chunk for f in pair}
-        hits = {p: ngram_cache[p] for p in files_needed if p in ngram_cache}
+        if inpath is not None:
+            if os.path.exists(inpath):
+                with open(inpath, "rb") as f:
+                    ngram_set = pickle.load(f)
+            elif progress:
+                print(f"Cache miss for {f}")
 
-        for p in hits:
-            ngram_cache.move_to_end(p)
+        if ngram_set is None:
+            ngram_set = get_file_normalized_ngram_set(f, ngrams)
+            if inpath is not None:
+                with open(inpath, "wb") as f:
+                    pickle.dump(ngram_set, f)
 
-        misses = files_needed - hits.keys()
-
-        if progress:
-            print(f"Hits: {len(hits)} | Misses: {len(misses)} | Cache: {len(ngram_cache)}")
-
-        surplus = max(0, len(ngram_cache) + len(misses) - cache_size)
-        for _ in range(surplus):
+        if len(ngram_cache) >= cache_size:
             ngram_cache.popitem(last=False)
 
-        new_sets = dict(collect_ngram_sets(misses, ngrams=ngrams, progress=progress)) if misses else {}
+        ngram_cache[filepath] = ngram_set
+        ngram_cache.move_to_end(filepath)
 
-        for p, s in new_sets.items():
-            ngram_cache[p] = s
+        return ngram_set
 
-        ngram_sets = {**hits, **new_sets}
+    for f1, f2 in tqdm(candidate_dups, disable=not progress, desc="Testing + clustering"):
+        if f1 not in ngram_cache:
+            load_ngram_set(f1)
+        if f2 not in ngram_cache:
+            load_ngram_set(f2)
 
-        def is_dup(pair):
-            f1, f2 = pair
-            s1, s2 = ngram_sets[f1], ngram_sets[f2]
-            if not s1 or not s2:
-                return None
-            jaccard_similarity = len(s1 & s2) / len(s1 | s2)
-            return pair if jaccard_similarity >= jaccard_threshold else None
+        s1, s2 = ngram_cache[f1], ngram_cache[f2]
+        if not s1 or not s2:
+            continue
 
-        with ThreadPoolExecutor(max_workers=os.cpu_count()) as tpool:
-            for dup in tqdm(tpool.map(is_dup, chunk), desc="Testing + clustering chunk", disable=not progress):
-                if dup:
-                    f1, f2 = dup
-                    clusters.setdefault(f1, set()).add(f2)
-                    clusters[f2] = clusters[f1]
+        jaccard_similarity = len(s1 & s2) / len(s1 | s2)
 
-        del ngram_sets, new_sets
-        gc.collect()
+        if jaccard_similarity >= jaccard_threshold:
+            clusters.setdefault(f1, set()).add(f2)
+            clusters[f2] = clusters[f1]
+
+    if progress:
+        print(f"Found {len(clusters)} clusters")
 
     # Set of clusters of duplicates
     cluster_set: set[frozenset[os.PathLike]] = {frozenset(cluster) for cluster in clusters.values()}
