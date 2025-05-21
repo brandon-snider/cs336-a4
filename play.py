@@ -1,5 +1,6 @@
 import json
 import os
+import pathlib
 import pickle
 from collections import defaultdict
 from fastwarc import FileStream, GZipStream
@@ -76,10 +77,25 @@ def merge_pickles():
     print(f"Dumped {len(signatures)} signatures to {outpath}")
 
 
+def clear_failed_reservations():
+    submission_dir = "/data/c-sniderb/a4-leaderboard/slurm_logs"
+    outdir = "/data/c-sniderb/a4-leaderboard/lang-toxic-gopher"
+    for filepath in os.listdir(submission_dir):
+        if filepath.endswith(".pkl") and not filepath.startswith("2"):
+            with open(os.path.join(submission_dir, filepath), "rb") as f:
+                result = pickle.load(f)
+                wet_filepath = result.args[0]
+                reservation_path = os.path.join(outdir, str(pathlib.Path(wet_filepath).name)) + ".reservation.txt"
+
+                if os.path.exists(reservation_path):
+                    os.remove(reservation_path)
+
+
 if __name__ == "__main__":
     # main()
     # main2()
     # merge_pickles()
+    clear_failed_reservations()
 
     # data_dir = "/data/c-sniderb/a4-leaderboard/near-deduped"
     # ngram_cache_dir = os.path.join(data_dir, "ngram-sets")

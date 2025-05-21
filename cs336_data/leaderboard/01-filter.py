@@ -2,24 +2,22 @@ import argparse
 import json
 import os
 import random
+import time
 from tqdm import tqdm
 import pathlib
 import submitit
 
 from fastwarc.warc import ArchiveIterator
-from fastwarc.stream_io import GZipStream, FileStream
-
 from cs336_data.extract_text import extract_text_from_html_bytes
 from cs336_data.gopher_quality_filters import gopher_quality_filter
 from cs336_data.harmful_content import classify_nsfw, classify_toxic_speech
 from cs336_data.language_identification import identify_language
 
-OUTDIR = "/data/c-sniderb/a4-leaderboard/lang-toxic-gopher"
+OUTDIR = "/data/c-sniderb/a4-leaderboard/lang-gopher"
 DATA_DIR = "/data/CC"
 
 
 def process_wet_file(input_path: str, output_path: str, progress: bool = False):
-    stream = GZipStream(FileStream(input_path, "rb"))
     total_docs = 0
     accepted_docs = []
 
@@ -31,11 +29,14 @@ def process_wet_file(input_path: str, output_path: str, progress: bool = False):
     }
 
     with open(output_path, "w") as accepted_file:
-        for record in ArchiveIterator(stream):
+        t0 = time.time()
+        for record in ArchiveIterator(open(input_path, "rb")):
             total_docs += 1
             if total_docs % 1000 == 0 and progress:
+                t1 = time.time()
+                time_per_doc_ms = (t1 - t0) / total_docs * 1000
                 print(
-                    f"Processed {total_docs} records | {len(accepted_docs)} accepted | {len(rejected_docs['language'])} rejected (language) | {len(rejected_docs['nsfw'])} rejected (nsfw) | {len(rejected_docs['toxic'])} rejected (toxic) | {len(rejected_docs['gopher_quality'])} rejected (gopher_quality)",
+                    f"Processed {total_docs} records | {len(accepted_docs)} accepted | {len(rejected_docs['language'])} rejected (language) | {len(rejected_docs['nsfw'])} rejected (nsfw) | {len(rejected_docs['toxic'])} rejected (toxic) | {len(rejected_docs['gopher_quality'])} rejected (gopher_quality) | {time_per_doc_ms:.2f}ms/doc",
                     end="\r",
                 )
 
@@ -43,26 +44,26 @@ def process_wet_file(input_path: str, output_path: str, progress: bool = False):
 
             lang, score = identify_language(text)
 
-            if lang != "en" or score < 0.7:
+            if lang != "en" or score < 0.85:
                 rejected_docs["language"].append([record.record_id, lang, score])
                 continue
 
-            nsfw_label, nsfw_conf = classify_nsfw(text)
-            if nsfw_label == "nsfw" or (nsfw_label == "non-nsfw" and nsfw_conf < 0.9):
-                rejected_docs["nsfw"].append([record.record_id, nsfw_label, nsfw_conf])
-                continue
+            # nsfw_label, nsfw_conf = classify_nsfw(text)
+            # if nsfw_label == "nsfw" or (nsfw_label == "non-nsfw" and nsfw_conf < 0.9):
+            #     rejected_docs["nsfw"].append([record.record_id, nsfw_label, nsfw_conf])
+            #     continue
 
-            toxic_label, toxic_conf = classify_toxic_speech(text)
-            if toxic_label == "toxic" or (toxic_label == "non-toxic" and toxic_conf < 0.8):
-                rejected_docs["toxic"].append([record.record_id, toxic_label, toxic_conf])
-                continue
+            # toxic_label, toxic_conf = classify_toxic_speech(text)
+            # if toxic_label == "toxic" or (toxic_label == "non-toxic" and toxic_conf < 0.8):
+            #     rejected_docs["toxic"].append([record.record_id, toxic_label, toxic_conf])
+            #     continue
 
             is_gopher_quality = gopher_quality_filter(text)
             if not is_gopher_quality:
                 rejected_docs["gopher_quality"].append([record.record_id])
                 continue
 
-            accepted_file.write(text + "\n\n")
+            accepted_file.write(text + "\n\n---END_OF_DOC---\n\n")
             accepted_docs.append(record.record_id)
 
     meta = {

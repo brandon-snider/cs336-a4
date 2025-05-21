@@ -38,8 +38,7 @@ def gopher_quality_filter(text: str, verbose: bool = False) -> bool:
     max_non_alpha_tokens = len(tokens) - min_alpha_tokens
     ct_non_alpha_tokens = 0
     for token in tokens:
-        ct_alpha_tokens = sum(1 for char in token if char.isalpha())
-        if ct_alpha_tokens == 0:
+        if not any(char.isalpha() for char in token):
             ct_non_alpha_tokens += 1
 
         if ct_non_alpha_tokens > max_non_alpha_tokens:

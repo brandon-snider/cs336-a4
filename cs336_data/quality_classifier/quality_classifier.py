@@ -11,7 +11,7 @@ label_map = {
 }
 
 
-def classify_quality(text: str) -> tuple[bool, float]:
+def classify_quality(text: str) -> tuple[str, float]:
     """
     Classify a document as high quality or not.
     Returns a tuple of (is_high_quality, confidence)
