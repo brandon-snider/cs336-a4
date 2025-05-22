@@ -6,43 +6,69 @@ import argparse
 import json
 import os
 import random
-import time
 from tqdm import tqdm
 import pathlib
 import submitit
 import concurrent.futures
 
-from cs336_data.harmful_content import classify_nsfw, classify_toxic_speech
+from cs336_data.c4_quality_filters import c4_quality_filter
+from cs336_data.gopher_quality_filters import gopher_quality_filter
 
-# DATA_DIR = "/data/c-sniderb/a4-leaderboard/02-heuristics"
-DATA_DIR = "/data/c-sniderb/a4-leaderboard/heuristics"
-OUTDIR = "/data/c-sniderb/a4-leaderboard/03-safety"
+# from transformers import AutoTokenizer
+# TOKENIZER = AutoTokenizer.from_pretrained("gpt2")
+
+DATA_DIR = "/data/c-sniderb/a4-leaderboard/01-english"
+OUTDIR = "/data/c-sniderb/a4-leaderboard/02-heuristics"
 
 
 def process_file(input_path: str, output_path: str, progress: bool = False):
     accepted_docs_count = 0
-    rejected_docs = {"nsfw": 0, "toxic": 0}
+    rejected_docs = {"blacklisted": 0, "no_lines_kept": 0, "gopher": 0, "nsfw": 0, "toxic": 0}
 
-    with open(output_path, "w") as fout:
-        with open(input_path) as fin:
-            docs = fin.read().split("\n\n---END_OF_DOC---\n\n")
+    accepted_lines_count = 0
 
-            for doc in tqdm(docs, total=len(docs), desc="Processing documents", disable=not progress):
-                nsfw_label, nsfw_conf = classify_nsfw(doc)
-                non_nsfw_conf = nsfw_conf if nsfw_label == "non-nsfw" else 1 - nsfw_conf
-                if non_nsfw_conf < 0.9:
-                    rejected_docs["nsfw"] += 1
-                    continue
+    rejected_lines = {
+        "short": 0,
+        "blacklisted": 0,
+        "invalid_terminator": 0,
+    }
 
-                toxic_label, toxic_conf = classify_toxic_speech(doc)
-                non_toxic_conf = toxic_conf if toxic_label == "non-toxic" else 1 - toxic_conf
-                if non_toxic_conf < 0.8:
-                    rejected_docs["toxic"] += 1
-                    continue
+    tokens = {"total": 0, "kept": 0, "rejected": 0}
 
-                accepted_docs_count += 1
+    with (
+        open(output_path, "w") as fout,
+        open(input_path) as fin,
+    ):
+        docs = fin.read().split("\n\n---END_OF_DOC---\n\n")
 
-                fout.write(doc + "\n\n---END_OF_DOC---\n\n")
+        for doc in tqdm(docs, total=len(docs), desc="Processing documents", disable=not progress):
+            is_c4_quality, filtered_doc, metadata = c4_quality_filter(doc)
+
+            # tokens["total"] += len(TOKENIZER.encode(doc))
+
+            if not is_c4_quality:
+                if metadata["reason"] == "blacklisted":
+                    rejected_docs["blacklisted"] += 1
+                elif metadata["reason"] == "no_lines_kept":
+                    rejected_docs["no_lines_kept"] += 1
+                continue
+
+            is_gopher_quality = gopher_quality_filter(filtered_doc)
+            if not is_gopher_quality:
+                rejected_docs["gopher"] += 1
+                continue
+
+            # tokens["kept"] += len(TOKENIZER.encode(filtered_doc))
+            # tokens["rejected"] = tokens["total"] - tokens["kept"]
+
+            accepted_docs_count += 1
+            accepted_lines_count += metadata["line_meta"]["kept"]
+
+            rejected_lines["short"] += metadata["line_meta"]["short"]
+            rejected_lines["blacklisted"] += metadata["line_meta"]["blacklisted"]
+            rejected_lines["invalid_terminator"] += metadata["line_meta"]["invalid_terminator"]
+
+            fout.write(filtered_doc + "\n\n---END_OF_DOC---\n\n")
 
     rejected_docs_count = sum(rejected_docs.values())
     total_docs = accepted_docs_count + rejected_docs_count
@@ -51,10 +77,19 @@ def process_file(input_path: str, output_path: str, progress: bool = False):
         "total_docs": total_docs,
         "accepted_docs_ct": accepted_docs_count,
         "rejected_docs_ct": rejected_docs_count,
+        "accepted_lines_in_accepted_docs_ct": accepted_lines_count,
+        "rejected_lines_in_accepted_docs_ct": sum(rejected_lines.values()),
         "rejected_docs_by_type": {
-            "nsfw": rejected_docs["nsfw"],
-            "toxic": rejected_docs["toxic"],
+            "blacklisted": rejected_docs["blacklisted"],
+            "no_lines_kept": rejected_docs["no_lines_kept"],
+            "gopher": rejected_docs["gopher"],
         },
+        "rejected_lines_in_accepted_docs_by_type": {
+            "short": rejected_lines["short"],
+            "blacklisted": rejected_lines["blacklisted"],
+            "invalid_terminator": rejected_lines["invalid_terminator"],
+        },
+        "tokens": tokens,
     }
 
     meta_outpath = f"{output_path}.meta.json"
@@ -150,9 +185,6 @@ def main(
                 total=len(wet_filepaths),
             ):
                 output_file, meta_outpath, short_meta = future.result()
-                # print(f"Output file written: {output_file}")
-                # print(f"Meta file written: {meta_outpath}")
-                # print(f"Short Meta: {short_meta}")
 
 
 if __name__ == "__main__":

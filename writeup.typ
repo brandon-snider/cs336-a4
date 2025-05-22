@@ -20,7 +20,7 @@
 #show: ilm.with(
   title: [CS 336: Assignment 4],
   author: "Brandon Snider",
-  date: datetime(year: 2025, month: 05, day: 20),
+  date: datetime(year: 2025, month: 05, day: 22),
   figure-index: (enabled: true),
   table-index: (enabled: true),
   listing-index: (enabled: true),
@@ -331,7 +331,7 @@
   | Total | 527 |
   ], caption: "Time to filter 5,000 CC WET files")
 
-  Estimated time to filter 100k CC WET files: 10,540 minutes (~176 hours or 7.3 days)
+  Estimated time to filter 100k CC WET files: 10,540 minutes (\~176 hours or \~7.3 days)
 
 == Problem (`inspect_filtered_data`): 4 points
 
@@ -393,7 +393,7 @@
 
   - Comment:
 
-    This example was appropriately removed by the language classifier.
+    This example (in Korean) was appropriately removed by the language classifier.
 
   Negative Example 2:
 
@@ -413,7 +413,7 @@
 
   - Comment:
 
-    This was not a full example, but a line that was removed during exact line deduplication. This makes sense, as the line is common boilerplate, has little semantic or structural information content, and is not representative of the target domains.
+    This is a line that was removed during exact line deduplication. This makes sense, as the line is common boilerplate, has little semantic or structural information content, and is not representative of the target domains.
 
   Negative Example 4:
 
@@ -429,7 +429,7 @@
 
   - Quote:
 
-    #quote("Email Protection | Cloudflare Please enable cookies. Email Protection You are unable to access this email address duroujian.shop The website from which you got to this page is protected by Cloudflare. Email addresses on that page have been hidden in order to keep them from being accessed by malicious bots. You must enable Javascript in your browser in order to decode the e-mail address. If you have a website and are interested in protecting it in a similar way, you can sign up for Cloudflare. How does Cloudflare protect email addresses on website from spammers? Can I sign up for Cloudflare? Cloudflare Ray ID: 936c92ebbe6e0809 • Your IP: Click to reveal 18.97.14.83 • Performance & security by Cloudflare", block: true)
+    #quote("...You are unable to access this email address duroujian.shop The website from which you got to this page is protected by Cloudflare. Email addresses on that page have been hidden in order to keep them from being accessed by malicious bots. You must enable Javascript in your browser in order to decode the e-mail address. If you have a website and are interested in protecting it in a similar way, you can sign up for Cloudflare. How does Cloudflare protect email addresses on website from spammers? Can I sign up for Cloudflare? Cloudflare Ray ID: 936c92ebbe6e0809 • Your IP: Click to reveal 18.97.14.83 • Performance & security by Cloudflare", block: true)
 
   - Comment:
 
@@ -449,14 +449,97 @@
 
 See `cs336_data/leaderboard/05-tokenize.py`
 
-Number of tokens in produced dataset: 6,377,480,404
+Number of tokens in produced dataset: *6,377,480,404*
 
 == Problem (`train_model`): 2 points
 
-Best validation loss: [TODO]
+Best validation loss: *3.288* (cluster crashed after *68k steps*)
 
-Associated learning curve: [TODO]
+Associated learning curve:
 
-What I did:
+#link("https://api.wandb.ai/links/brandon-snider-stanford-university/at3ujt47", "WandB Report")
 
-[TODO]
+#figure(
+  image("images/learning-curve.png"),
+  caption: "Leaderboard Run — Eval Loss Curve",
+)
+
+*What I did:*
+
+- Pass 1: p(English) > 0.85
+  - Used the `lid.176.bin` fastText classifier
+  - Discarded \~86% of docs (100% $arrow$ 14.03%)
+- Pass 2: heuristics (from the C4 and Gohper papers)
+  - C4 heuristics:
+    - Discard entire documents containing "lorem ipsum" or "{"
+      - There's a lot of JavaScript on the web, and "{" is rare in non-code pages
+    - Remove lines with fewer than 5 words
+    - Remove lines ending with non-punctuation terminators (valid: `.`, `!`, `?`, `"`, `'`)
+    - Remove lines containing blacklisted boilerplate (e.g. "javascript", "privacy policy")
+      - See #link(label("c4-line-blacklisting"), "appendix") for the full list
+    - Discard documents from which all lines were removed
+  - Gopher heuristics:
+    - Discard documents with fewer than 50 tokens
+    - Discard documents with more than 100,000 tokens
+    - Discard documents with a mean token length less than 3 or greater than 10
+    - Discard documents with more than 30% of lines ending with "..."
+    - Discard documents with fewer than 80% of tokens containing an alphabetic character
+  - Result: Discarded \~56% of remaining data (14.03% $arrow$ 6.16%)
+- Pass 3: exact line deduplication
+  - Discard all occurrences (including the first) of any duplicated line, corpus-wide
+  - Discarding documents that now contain \<50 words
+  - Discarded \~35% of remaining docs (6.16% $arrow$ 3.99%)
+
+_Training a fastText classifier:_
+
+I then trained a fastText classifier using examples from this filtered subset (\~4% of the raw CC data) as the negative examples, and documents from the validation set as positive examples. I used 13,500 documents from each class (i.e. all the documents from the validation set, holding out 500 for the classifier's own validation set).
+
+I tweaked fastText parameters, tried using more examples from the (abundant) negative class (3:1 and 5:1 negative:positive ratio), and separately tried duplicating the positive examples to balance the classes (1:1 ratio, but with positives repeated). Nothing worked better than simply using balanced classes and the default fastText parameters, aside from an increased learning rate (lr=0.2).
+
+The best accurary I could achieve with the classifier was 0.81 on the validation set. I surmise that, while more would have helped, the distributions of the two classes were already not massively different after the above filtering, so learning to distinguish well in the constrained-data regime was tough.
+
+_Applying the classifier_:
+
+I estimated that we'd require \~6.5B training tokens based on the training configuration, and sought the highest-quality subset of that size. I tested two approaches:
+
+- Single-threshold: I picked a threshold for the score associated with the positive class that would keep \~6.5B tokens (which turned out to be 0.09), and retained examples that passed the threshold.
+- Multi-threshold: I repeated higher-scoring examples in the training set, as follows:
+  - >0.84: 4x
+  - >0.72: 3x
+  - >0.58: 2x
+  - >0.36: 1x
+
+  The thresholds were chosen to (i) roughly balance the number of examples passing each threshold (counting repeats), (ii) retain \~6.5B total tokens. Truthfully, this is just for lack of a more principled way of doing it.
+
+  I found it interesting that, in the final run, the training loss and validation loss were within noise distance of each other from start to finish, suggesting that (i) the distributions are similar, (ii) the repetition of examples with high scores did not cause problematic overfitting.
+
+= Appendix
+
+== C4 line-level blacklist <c4-line-blacklisting>
+
+All lines containing any of the following were removed:
+
+- "javascript",
+- "privacy policy",
+- "terms of use",
+- "cookie policy",
+- "uses cookies",
+- "use of cookies",
+- "use cookies",
+- "all rights reserved",
+- "terms and conditions",
+- "copyright ©",
+- "© copyright",
+
+Short lines (less than 15 words) containing any of the following were also removed:
+
+- "powered by",
+- "designed by",
+- "theme by",
+- "template by",
+- "website by",
+
+
+Lines that did not end with a valid terminator (., !, ?, ", ') were also removed.
+
+

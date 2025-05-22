@@ -5,7 +5,7 @@ import os
 from tqdm import tqdm
 
 
-DATA_DIR = "/data/c-sniderb/a4-leaderboard/lang-gopher"
+DATA_DIR = "/data/c-sniderb/a4-leaderboard/01-english"
 
 
 def main(data_dir: str = DATA_DIR):
@@ -18,7 +18,7 @@ def main(data_dir: str = DATA_DIR):
         with open(meta_path) as f:
             meta = json.load(f)
 
-        merged_meta[filename] = {k: v for k, v in meta.items() if k not in ["accepted_docs", "rejected_docs"]}
+        merged_meta[filename] = meta
 
     with open(os.path.join(data_dir, "merged_meta.json"), "w") as f:
         json.dump(merged_meta, f)
@@ -26,7 +26,7 @@ def main(data_dir: str = DATA_DIR):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--data_dir", type=str, default=DATA_DIR)
+    parser.add_argument("--data-dir", type=str, default=DATA_DIR)
     args = parser.parse_args()
 
     main(args.data_dir)

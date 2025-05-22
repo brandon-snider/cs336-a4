@@ -1,20 +1,21 @@
 import argparse
+import concurrent.futures
 import json
 import os
 import random
 
 import submitit
 from cs336_data.leaderboard.classifier.c4_100_classifier import classify_c4_100
-# from transformers import AutoTokenizer
-
 from tqdm import tqdm
+from transformers import AutoTokenizer
 
-DATA_DIR = "/data/c-sniderb/a4-leaderboard/lang-gopher"
-OUT_DIR = "/data/c-sniderb/a4-leaderboard/classified-bucketed"
+TOKENIZER = AutoTokenizer.from_pretrained("gpt2")
+
+DATA_DIR = "/data/c-sniderb/a4-leaderboard/03-exact-deduped"
+OUT_DIR = "/data/c-sniderb/a4-leaderboard/04-classified-bucketed"
 
 MAX_FILES = 10_000
 CHUNK_SIZE = 30
-# TOKENIZER = AutoTokenizer.from_pretrained("gpt2")
 
 
 def deep_add_merge(a, b):
@@ -38,8 +39,8 @@ def process_file(inpath: str, outpath: str, brackets: dict[float, int]):
         stats[min_conf] = {
             "unique_docs_count": 0,
             "docs_count": 0,
-            # "tokens_count": 0,
-            # "unique_tokens_count": 0,
+            "tokens_count": 0,
+            "unique_tokens_count": 0,
         }
 
     with open(inpath) as fin, open(outpath, "w") as fout:
@@ -60,7 +61,7 @@ def process_file(inpath: str, outpath: str, brackets: dict[float, int]):
             stats[min_conf]["docs_count"] += n_repeats
 
             # token_count = len(TOKENIZER.encode(doc))
-            # stats[min_conf]["unique_tokens_count"] += token_count
+            # stats[min_conf]["unique_tokens_count"] += token_count if n_repeats > 0 else 0
             # stats[min_conf]["tokens_count"] += n_repeats * token_count
 
             for _ in range(n_repeats):
@@ -85,6 +86,7 @@ def main(
     max_files: int = None,
     chunk_size: int = CHUNK_SIZE,
     single: bool = False,
+    mp: bool = False,
     threshold: float = None,
 ):
     os.makedirs(out_dir, exist_ok=True)
@@ -102,21 +104,9 @@ def main(
     is_bracketed = threshold is None
     if is_bracketed:
         # Min confidence -> n_repeats
-        brackets = {0.9: 6, 0.75: 4, 0.5: 3, 0.3: 2, 0.1: 1, 0.0: 0}
+        brackets = {0.84: 4, 0.72: 3, 0.56: 2, 0.35: 1, 0.0: 0}
     else:
         brackets = {threshold: 1, 0.0: 0}
-
-    executor = submitit.AutoExecutor(folder="/data/c-sniderb/a4-leaderboard/slurm_logs")
-    max_simultaneous_jobs = 16
-    executor.update_parameters(
-        slurm_array_parallelism=max_simultaneous_jobs,
-        timeout_min=10,
-        mem_gb=4,
-        cpus_per_task=1,
-        slurm_account="student",
-        slurm_partition="a4-cpu",
-        slurm_qos="a4-cpu-qos",
-    )
 
     stats_list = []
 
@@ -124,7 +114,35 @@ def main(
         for filepath in tqdm(filepaths, desc="Files"):
             outpath = os.path.join(out_dir, os.path.basename(filepath))
             stats_list.append(process_file(filepath, outpath, brackets))
+    elif mp:
+        num_cpus = len(os.sched_getaffinity(0))
+        print(f"Using {num_cpus} CPUs")
+        executor = concurrent.futures.ProcessPoolExecutor(max_workers=num_cpus)
+
+        futures = []
+
+        for filepath in filepaths:
+            future = executor.submit(
+                process_file, filepath, os.path.join(out_dir, os.path.basename(filepath)), brackets
+            )
+            futures.append(future)
+
+        for future in tqdm(futures, total=len(futures)):
+            out = future.result()
+            stats_list.append(out)
     else:
+        executor = submitit.AutoExecutor(folder="/data/c-sniderb/a4-leaderboard/slurm_logs")
+        max_simultaneous_jobs = 16
+        executor.update_parameters(
+            slurm_array_parallelism=max_simultaneous_jobs,
+            timeout_min=10,
+            mem_gb=4,
+            cpus_per_task=1,
+            slurm_account="student",
+            slurm_partition="a4-cpu",
+            slurm_qos="a4-cpu-qos",
+        )
+
         futures = []
 
         with executor.batch():
@@ -141,19 +159,30 @@ def main(
     for s in stats_list:
         stats = deep_add_merge(stats, s)
 
+    total_tokens = sum(stats[th]["tokens_count"] for th in stats)
+    total_unique_tokens = sum(stats[th]["unique_tokens_count"] for th in stats)
+
+    stats["total"] = {
+        "tokens_count": total_tokens,
+        "unique_tokens_count": total_unique_tokens,
+        "est_total_tokens": total_tokens / len(filepaths) * 5000,
+        "est_total_unique_tokens": total_unique_tokens / len(filepaths) * 5000,
+    }
+
     with open(os.path.join(out_dir, "stats.json"), "w") as fin:
         json.dump(stats, fin, indent=4)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--max_files", type=int, default=MAX_FILES)
-    parser.add_argument("--chunk_size", type=int, default=CHUNK_SIZE)
-    parser.add_argument("--data_dir", type=str, default=DATA_DIR)
-    parser.add_argument("--out_dir", type=str, default=OUT_DIR)
+    parser.add_argument("--max-files", type=int, default=MAX_FILES)
+    parser.add_argument("--chunk-size", type=int, default=CHUNK_SIZE)
+    parser.add_argument("--data-dir", type=str, default=DATA_DIR)
+    parser.add_argument("--out-dir", type=str, default=OUT_DIR)
     parser.add_argument("--single", action="store_true")
     parser.add_argument("--thresholded", action="store_true")
     parser.add_argument("--threshold", type=float, default=None)
+    parser.add_argument("--mp", action="store_true")
     args = parser.parse_args()
 
     if args.thresholded:
@@ -165,5 +194,6 @@ if __name__ == "__main__":
         max_files=args.max_files,
         chunk_size=args.chunk_size,
         single=args.single,
+        mp=args.mp,
         threshold=args.threshold,
     )

@@ -1,12 +1,11 @@
 from collections import OrderedDict
-from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from functools import partial
-import gc
+import multiprocessing
 import os
 import random
 import re
 import shutil
-import time
 import mmh3
 import numpy as np
 import unicodedata
@@ -63,17 +62,16 @@ def collect_signatures(
     *,
     ngrams: int,
     num_hashes: int,
-    jobs: int | None = None,
     progress: bool = False,
 ):
-    jobs = jobs or os.cpu_count()
-    with ProcessPoolExecutor(max_workers=jobs) as pool:
+    signatures = {}
+    with ProcessPoolExecutor(max_workers=multiprocessing.cpu_count()) as pool:
         submit = partial(pool.submit, build_signature, ngrams=ngrams, num_hashes=num_hashes)
-
         futures = [submit(p) for p in input_files]
-
         for future in tqdm(as_completed(futures), total=len(futures), disable=not progress, desc="Building signatures"):
-            yield future.result()
+            path, minhash = future.result()
+            signatures[path] = minhash
+    return signatures
 
 
 def build_ngram_set(path: os.PathLike, *, ngrams: int):
@@ -85,18 +83,19 @@ def collect_ngram_sets(
     files: set[os.PathLike],
     *,
     ngrams: int,
-    jobs: int | None = None,
     progress: bool = False,
 ):
     """Parallel map: file → n‑gram set. Yields (path, set) tuples."""
-    jobs = jobs or os.cpu_count()
-    with ProcessPoolExecutor(max_workers=jobs) as pool:
+    ngram_sets = {}
+    with ProcessPoolExecutor(max_workers=multiprocessing.cpu_count()) as pool:
         submit = partial(pool.submit, build_ngram_set, ngrams=ngrams)
         futures = [submit(p) for p in files]
         for future in tqdm(
             as_completed(futures), total=len(futures), disable=not progress, desc="Building n‑gram sets"
         ):
-            yield future.result()
+            path, ngram_set = future.result()
+            ngram_sets[path] = ngram_set
+    return ngram_sets
 
 
 def minhash_dedupe(
@@ -107,10 +106,6 @@ def minhash_dedupe(
     jaccard_threshold: float,
     output_directory: os.PathLike,
     progress: bool = False,
-    cache_size: int = 3000,
-    signatures_inpath: os.PathLike | None = None,
-    signatures_outpath: os.PathLike | None = None,
-    ngram_cache_dir: os.PathLike | None = None,
 ):
     if not os.path.exists(output_directory):
         os.makedirs(output_directory)
@@ -121,17 +116,7 @@ def minhash_dedupe(
     # Set of pairs of filenames of files that are candidate duplicates based on minhash bands
     candidate_dups: set[tuple[os.PathLike, os.PathLike]] = set()
 
-    if signatures_inpath is not None and os.path.exists(signatures_inpath):
-        with open(signatures_inpath, "rb") as f:
-            signatures = pickle.load(f)
-        print(f"Loaded {len(signatures)} signatures from {signatures_inpath}")
-    else:
-        signatures = list(collect_signatures(input_files, ngrams=ngrams, num_hashes=num_hashes, progress=progress))
-
-        if signatures_outpath is not None:
-            with open(signatures_outpath, "wb") as f:
-                pickle.dump(signatures, f)
-            print(f"Dumped {len(signatures)} signatures to {signatures_outpath}")
+    signatures = collect_signatures(input_files, ngrams=ngrams, num_hashes=num_hashes, progress=progress)
 
     for file, minhash in signatures:
         for band in range(num_bands):
@@ -149,41 +134,12 @@ def minhash_dedupe(
 
     # Map from filepath -> set of files that are in the same cluster of duplicates
     clusters: dict[os.PathLike, set[os.PathLike]] = {}
-    ngram_cache: OrderedDict[os.PathLike, set[str]] = OrderedDict()
 
-    def load_ngram_set(filepath: os.PathLike):
-        filename = os.path.basename(filepath)
-        ngram_set = None
-        inpath = None if ngram_cache_dir is None else os.path.join(ngram_cache_dir, filename + ".pkl")
-
-        if inpath is not None:
-            if os.path.exists(inpath):
-                with open(inpath, "rb") as f:
-                    ngram_set = pickle.load(f)
-            elif progress:
-                print(f"Cache miss for {f}")
-
-        if ngram_set is None:
-            ngram_set = get_file_normalized_ngram_set(f, ngrams)
-            if inpath is not None:
-                with open(inpath, "wb") as f:
-                    pickle.dump(ngram_set, f)
-
-        if len(ngram_cache) >= cache_size:
-            ngram_cache.popitem(last=False)
-
-        ngram_cache[filepath] = ngram_set
-        ngram_cache.move_to_end(filepath)
-
-        return ngram_set
+    unique_files = set(f for _, f in candidate_dups)
+    ngram_sets = collect_ngram_sets(unique_files, ngrams=ngrams, progress=progress)
 
     for f1, f2 in tqdm(candidate_dups, disable=not progress, desc="Testing + clustering"):
-        if f1 not in ngram_cache:
-            load_ngram_set(f1)
-        if f2 not in ngram_cache:
-            load_ngram_set(f2)
-
-        s1, s2 = ngram_cache[f1], ngram_cache[f2]
+        s1, s2 = ngram_sets[f1], ngram_sets[f2]
         if not s1 or not s2:
             continue
 

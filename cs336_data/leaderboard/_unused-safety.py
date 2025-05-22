@@ -12,114 +12,51 @@ import pathlib
 import submitit
 import concurrent.futures
 
-from cs336_data.c4_quality_filters import c4_quality_filter
-from cs336_data.gopher_quality_filters import gopher_quality_filter
+from cs336_data.harmful_content import classify_nsfw, classify_toxic_speech
 
-# from transformers import AutoTokenizer
-# TOKENIZER = AutoTokenizer.from_pretrained("gpt2")
-
-DATA_DIR = "/data/c-sniderb/a4-leaderboard/01-english"
-OUTDIR = "/data/c-sniderb/a4-leaderboard/02-heuristics"
+# DATA_DIR = "/data/c-sniderb/a4-leaderboard/02-heuristics"
+DATA_DIR = "/data/c-sniderb/a4-leaderboard/heuristics"
+OUTDIR = "/data/c-sniderb/a4-leaderboard/03-safety"
 
 
 def process_file(input_path: str, output_path: str, progress: bool = False):
     accepted_docs_count = 0
-    rejected_docs = {"blacklisted": 0, "no_lines_kept": 0, "gopher": 0, "nsfw": 0, "toxic": 0}
+    rejected_docs = {"nsfw": 0, "toxic": 0}
 
-    accepted_lines_count = 0
+    with (
+        open(output_path, "w") as fout,
+        open(input_path) as fin,
+    ):
+        docs = fin.read().split("\n\n---END_OF_DOC---\n\n")
 
-    rejected_lines = {
-        "short": 0,
-        "blacklisted": 0,
-        "invalid_terminator": 0,
-    }
+        for doc in tqdm(docs, total=len(docs), desc="Processing documents", disable=not progress):
+            nsfw_label, nsfw_conf = classify_nsfw(doc)
+            non_nsfw_conf = nsfw_conf if nsfw_label == "non-nsfw" else 1 - nsfw_conf
+            if non_nsfw_conf < 0.9:
+                rejected_docs["nsfw"] += 1
+                continue
 
-    tokens = {"total": 0, "kept": 0, "rejected": 0}
+            toxic_label, toxic_conf = classify_toxic_speech(doc)
+            non_toxic_conf = toxic_conf if toxic_label == "non-toxic" else 1 - toxic_conf
+            if non_toxic_conf < 0.8:
+                rejected_docs["toxic"] += 1
+                continue
 
-    with open(output_path, "w") as fout:
-        with open(input_path) as fin:
-            t0 = time.time()
+            accepted_docs_count += 1
 
-            docs = fin.read().split("\n\n---END_OF_DOC---\n\n")
+            fout.write(doc + "\n\n---END_OF_DOC---\n\n")
 
-            for doc in tqdm(docs, total=len(docs), desc="Processing documents", disable=not progress):
-                rejected_docs_count = sum(rejected_docs.values())
-                total_docs = accepted_docs_count + rejected_docs_count
-
-                if total_docs % 1000 == 0 and progress:
-                    t1 = time.time()
-                    time_per_doc_ms = (t1 - t0) / total_docs * 1000
-
-                    rejected_lines_count = sum(rejected_lines.values())
-                    total_lines = accepted_lines_count + rejected_lines_count
-
-                    docs_kept_pct = accepted_docs_count / total_docs
-                    docs_rejected_pct = rejected_docs_count / total_docs
-                    lines_kept_pct = accepted_lines_count / total_lines
-                    lines_rejected_pct = rejected_lines_count / total_lines
-
-                    print(
-                        f"{total_docs:,} docs | Kept {accepted_docs_count:,} ({docs_kept_pct:.2%}) | Rejected {rejected_docs_count:,} ({docs_rejected_pct:.2%}) | {accepted_lines_count:,} accepted lines ({lines_kept_pct:.2%}) | {rejected_lines_count:,} rejected lines ({lines_rejected_pct:.2%}) | {time_per_doc_ms:.2f}ms/doc",
-                        end="\r",
-                    )
-
-                is_c4_quality, filtered_doc, metadata = c4_quality_filter(doc)
-
-                # tokens["total"] += len(TOKENIZER.encode(doc))
-
-                if not is_c4_quality:
-                    if metadata["reason"] == "blacklisted":
-                        rejected_docs["blacklisted"] += 1
-                    elif metadata["reason"] == "no_lines_kept":
-                        rejected_docs["no_lines_kept"] += 1
-                    continue
-
-                is_gopher_quality = gopher_quality_filter(filtered_doc)
-                if not is_gopher_quality:
-                    rejected_docs["gopher"] += 1
-                    continue
-
-                # nsfw_label, nsfw_conf = classify_nsfw(text)
-                # non_nsfw_conf = nsfw_conf if nsfw_label == "non-nsfw" else 1 - nsfw_conf
-                # if non_nsfw_conf < 0.9:
-                #     rejected_docs["nsfw"] += 1
-                #     continue
-
-                # toxic_label, toxic_conf = classify_toxic_speech(text)
-                # non_toxic_conf = toxic_conf if toxic_label == "non-toxic" else 1 - toxic_conf
-                # if non_toxic_conf < 0.8:
-                #     rejected_docs["toxic"] += 1
-                #     continue
-
-                # tokens["kept"] += len(TOKENIZER.encode(filtered_doc))
-                # tokens["rejected"] = tokens["total"] - tokens["kept"]
-
-                accepted_docs_count += 1
-                accepted_lines_count += metadata["line_meta"]["kept"]
-
-                rejected_lines["short"] += metadata["line_meta"]["short"]
-                rejected_lines["blacklisted"] += metadata["line_meta"]["blacklisted"]
-                rejected_lines["invalid_terminator"] += metadata["line_meta"]["invalid_terminator"]
-
-                fout.write(filtered_doc + "\n\n---END_OF_DOC---\n\n")
+    rejected_docs_count = sum(rejected_docs.values())
+    total_docs = accepted_docs_count + rejected_docs_count
 
     meta = {
         "total_docs": total_docs,
         "accepted_docs_ct": accepted_docs_count,
-        "rejected_docs_ct": sum(rejected_docs.values()),
-        "accepted_lines_in_accepted_docs_ct": accepted_lines_count,
-        "rejected_lines_in_accepted_docs_ct": sum(rejected_lines.values()),
+        "rejected_docs_ct": rejected_docs_count,
         "rejected_docs_by_type": {
-            "blacklisted": rejected_docs["blacklisted"],
-            "no_lines_kept": rejected_docs["no_lines_kept"],
-            "gopher": rejected_docs["gopher"],
+            "nsfw": rejected_docs["nsfw"],
+            "toxic": rejected_docs["toxic"],
         },
-        "rejected_lines_in_accepted_docs_by_type": {
-            "short": rejected_lines["short"],
-            "blacklisted": rejected_lines["blacklisted"],
-            "invalid_terminator": rejected_lines["invalid_terminator"],
-        },
-        "tokens": tokens,
     }
 
     meta_outpath = f"{output_path}.meta.json"

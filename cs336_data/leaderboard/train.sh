@@ -9,5 +9,6 @@
 
 uv run torchrun --standalone --nproc_per_node=2 \
     scripts/train.py \
-    --config-name=experiment/v01-thresholded-005 \
-    +training.save_checkpoints=True
+    --config-name=experiment/bucketed.yaml
+
+# export CUDA_VISIBLE_DEVICES=4,5

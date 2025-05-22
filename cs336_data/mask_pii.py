@@ -26,14 +26,14 @@ IPV4_REGEX = re.compile(
         [1-9]?\d)                       # 0-99
         \.
     ){3}
-    (?:25[0-5]|2[0-4]\d|1\d{2}|[1-9]?\d) # Final octet
+    (?:25[0-5]|2[0-4]\d|1\d{2}|[1-9]?\d)
     (?!\d)                              # Don't match if followed by a digit
 """,
     re.VERBOSE,
 )
 
 
-def mask_emails(text: str, include_original: bool = False) -> tuple[str, int]:
+def mask_emails(text: str) -> tuple[str, int]:
     placeholder = "|||EMAIL_ADDRESS|||"
     matches = list(EMAIL_REGEX.finditer(text))
     redacted_text = EMAIL_REGEX.sub(placeholder, text)

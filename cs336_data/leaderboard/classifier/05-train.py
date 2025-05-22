@@ -4,7 +4,7 @@ import fasttext
 def main():
     model = fasttext.train_supervised(
         input="/data/c-sniderb/a4-leaderboard/classifier/quality.train",
-        epoch=30,
+        epoch=5,
         lr=0.2,
         # loss="hs",
         # wordNgrams=3,

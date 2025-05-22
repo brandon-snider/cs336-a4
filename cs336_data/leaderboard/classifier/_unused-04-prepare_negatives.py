@@ -3,11 +3,13 @@ import os
 import random
 from tqdm import tqdm
 
-DATA_DIR = "/data/c-sniderb/a4-leaderboard/classifier/tmp-neg-near-deduped"
+DATA_DIR = "/data/c-sniderb/a4-leaderboard/classifier/tmp-neg"
 OUTPATH = "/data/c-sniderb/a4-leaderboard/classifier/negatives.txt"
 
+NUM_EXAMPLES = 28000
 
-def main(data_dir: str = DATA_DIR, outpath: str = OUTPATH, num_examples: int = 14000):
+
+def main(data_dir: str = DATA_DIR, outpath: str = OUTPATH, num_examples: int = NUM_EXAMPLES):
     examples = []
 
     for file in tqdm(os.listdir(data_dir)):
@@ -29,6 +31,6 @@ def main(data_dir: str = DATA_DIR, outpath: str = OUTPATH, num_examples: int = 1
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--num-examples", type=int, default=14000)
+    parser.add_argument("--num-examples", type=int, default=NUM_EXAMPLES)
     args = parser.parse_args()
     main(num_examples=args.num_examples)

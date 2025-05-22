@@ -12,11 +12,10 @@ def main(data_dir: str = DATA_DIR, outdir: str = OUTDIR):
     print(f"Exact deduping {len(filepaths)} files")
     exact_line_dedupe_docs(filepaths, outdir, progress=True)
 
-    # Remove empty files from outdir
     removals = 0
     for f in tqdm(os.listdir(outdir), desc="Removing empty files"):
         path = os.path.join(outdir, f)
-        with open(path, "r") as f:
+        with open(path) as f:
             content = f.read()
             if len(content) == 0 or len(content.strip()) == 0:
                 removals += 1

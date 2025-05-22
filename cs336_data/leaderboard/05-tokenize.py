@@ -5,13 +5,13 @@ import numpy as np
 from tqdm import tqdm
 from transformers import AutoTokenizer
 
-INPUT_DIR = "/data/c-sniderb/a4-leaderboard/classified-thresholded"
+INPUT_DIR = "/data/c-sniderb/a4-leaderboard/04-classified-thresholded"
 OUTPUT_PATH = "/data/c-sniderb/a4-leaderboard/tokenized-thresholded.bin"
-tokenizer = AutoTokenizer.from_pretrained("gpt2")
+TOKENIZER = AutoTokenizer.from_pretrained("gpt2")
 
 
 def tokenize_and_add_eos(doc: str):
-    return tokenizer.encode(doc) + [tokenizer.eos_token_id]
+    return TOKENIZER.encode(doc) + [TOKENIZER.eos_token_id]
 
 
 def main(input_dir: str, output_path: str):
@@ -44,12 +44,13 @@ def main(input_dir: str, output_path: str):
     print(f"Tokenized and encoded {len(input_paths)} docs into {len(all_ids)} tokens")
     ids_array = np.array(all_ids, dtype=np.uint16)
     ids_array.tofile(output_path)
+    print(f"Saved tokenized docs to {output_path}")
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--input_dir", type=str, default=INPUT_DIR)
-    parser.add_argument("--output_path", type=str, default=OUTPUT_PATH)
+    parser.add_argument("--input-dir", type=str, default=INPUT_DIR)
+    parser.add_argument("--output-path", type=str, default=OUTPUT_PATH)
     args = parser.parse_args()
 
     main(args.input_dir, args.output_path)

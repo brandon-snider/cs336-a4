@@ -2,7 +2,6 @@ import argparse
 import json
 import os
 import random
-import time
 from tqdm import tqdm
 import pathlib
 import submitit
@@ -17,44 +16,25 @@ DATA_DIR = "/data/CC"
 
 
 def process_wet_file(input_path: str, output_path: str, progress: bool = False):
-    total_docs = 0
     accepted_docs = []
-
-    rejected_docs = {
-        "language": [],
-    }
+    rejected_docs = []
 
     with open(output_path, "w") as accepted_file:
-        t0 = time.time()
         for record in ArchiveIterator(open(input_path, "rb")):
-            total_docs += 1
-            if total_docs % 1000 == 0 and progress:
-                t1 = time.time()
-                time_per_doc_ms = (t1 - t0) / total_docs * 1000
-                print(
-                    f"Processed {total_docs} records | {len(accepted_docs)} accepted | {len(rejected_docs['language'])} rejected (language) | {time_per_doc_ms:.2f}ms/doc",
-                    end="\r",
-                )
-
             text = bytes_to_unicode(record.reader.read())
-
             lang, score = identify_language(text)
 
             if lang != "en" or score < 0.85:
-                rejected_docs["language"].append([record.record_id, lang, score])
+                rejected_docs.append(record.record_id)
                 continue
 
             accepted_file.write(text + "\n\n---END_OF_DOC---\n\n")
             accepted_docs.append(record.record_id)
 
     meta = {
-        "total_docs": total_docs,
         "accepted_ct": len(accepted_docs),
+        "rejected_ct": len(rejected_docs),
         "accepted_docs": accepted_docs,
-        "rejected_ct": sum(len(v) for v in rejected_docs.values()),
-        "rejected_by_type": {
-            "language": len(rejected_docs["language"]),
-        },
         "rejected_docs": rejected_docs,
     }
 
@@ -75,7 +55,7 @@ def main(
     wait: bool = True,
     mp: bool = False,
 ):
-    # random.seed(42)
+    random.seed(42)
 
     os.makedirs(outdir, exist_ok=True)
 
@@ -148,15 +128,11 @@ def main(
                 futures.append(future)
 
         if wait:
-            # Iterate over completed futures as they finish, using a progress bar to keep track
             for future in tqdm(
                 submitit.helpers.as_completed(futures),
                 total=len(wet_filepaths),
             ):
                 output_file, meta_outpath, short_meta = future.result()
-                # print(f"Output file written: {output_file}")
-                # print(f"Meta file written: {meta_outpath}")
-                # print(f"Short Meta: {short_meta}")
 
 
 if __name__ == "__main__":

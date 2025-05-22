@@ -2,17 +2,6 @@ import json
 import os
 import pathlib
 import pickle
-from collections import defaultdict
-from fastwarc import FileStream, GZipStream
-from fastwarc.warc import ArchiveIterator, WarcRecordType
-import tldextract
-from tqdm import tqdm
-from transformers import AutoTokenizer
-from cs336_data.extract_text import extract_text_from_html_bytes
-from cs336_data.gopher_quality_filters import gopher_quality_filter
-from cs336_data.harmful_content import classify_nsfw, classify_toxic_speech
-from cs336_data.language_identification import identify_language
-from cs336_data.leaderboard.common import c4_100_domains
 
 
 def main():
@@ -132,3 +121,4 @@ if __name__ == "__main__":
     # main2()
     # merge_pickles()
     # clear_failed_reservations()
+    pass

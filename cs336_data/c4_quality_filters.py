@@ -76,6 +76,6 @@ def c4_quality_filter(doc: str, verbose: bool = False) -> tuple[bool, str, dict]
         kept_lines.append(line)
 
     if not kept_lines:
-        return False, "", {"reason": "no lines kept", "line_meta": line_meta}
+        return False, "", {"reason": "no_lines_kept", "line_meta": line_meta}
 
     return True, "\n".join(kept_lines), {"line_meta": line_meta}
