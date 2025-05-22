@@ -1,88 +1,169 @@
+import argparse
+import json
 import os
 import random
-from cs336_data.gopher_quality_filters import gopher_quality_filter
+
+import submitit
 from cs336_data.leaderboard.classifier.c4_100_classifier import classify_c4_100
-from transformers import AutoTokenizer
+# from transformers import AutoTokenizer
 
 from tqdm import tqdm
 
 DATA_DIR = "/data/c-sniderb/a4-leaderboard/lang-gopher"
-OUT_DIR = "/data/c-sniderb/a4-leaderboard/classified"
+OUT_DIR = "/data/c-sniderb/a4-leaderboard/classified-bucketed"
 
-MAX_FILES = 5
+MAX_FILES = 10_000
+CHUNK_SIZE = 30
+# TOKENIZER = AutoTokenizer.from_pretrained("gpt2")
 
-TOKENIZER = AutoTokenizer.from_pretrained("gpt2")
+
+def deep_add_merge(a, b):
+    for k, v in b.items():
+        if k in a:
+            if isinstance(v, dict) and isinstance(a[k], dict):
+                deep_add_merge(a[k], v)
+            elif isinstance(v, int | float) and isinstance(a[k], int | float):
+                a[k] += v
+            else:
+                a[k] = v
+        else:
+            a[k] = v
+
+    return a
 
 
-def main(data_dir: str = DATA_DIR, out_dir: str = OUT_DIR, max_files: int = MAX_FILES):
+def process_file(inpath: str, outpath: str, brackets: dict[float, int]):
+    stats = {}
+    for min_conf, n_repeats in brackets.items():
+        stats[min_conf] = {
+            "unique_docs_count": 0,
+            "docs_count": 0,
+            # "tokens_count": 0,
+            # "unique_tokens_count": 0,
+        }
+
+    with open(inpath) as fin, open(outpath, "w") as fout:
+        docs = fin.read().split("\n\n---END_OF_DOC---\n\n")
+
+        # for doc in tqdm(docs, desc="Docs in file"):
+        for doc in docs:
+            if not doc.strip():
+                continue
+
+            label, conf = classify_c4_100(doc)
+            pos_score = conf if label == "positive" else 1 - conf
+
+            min_conf = max((th for th in brackets if pos_score > th), default=0)
+            n_repeats = brackets[min_conf]
+
+            stats[min_conf]["unique_docs_count"] += 1
+            stats[min_conf]["docs_count"] += n_repeats
+
+            # token_count = len(TOKENIZER.encode(doc))
+            # stats[min_conf]["unique_tokens_count"] += token_count
+            # stats[min_conf]["tokens_count"] += n_repeats * token_count
+
+            for _ in range(n_repeats):
+                fout.write(doc + "\n\n---END_OF_DOC---\n\n")
+
+    return stats
+
+
+def process_file_chunk(filepaths: list[str], out_dir: str, brackets: dict[float, int]):
+    stats_list = []
+
+    for filepath in filepaths:
+        outpath = os.path.join(out_dir, os.path.basename(filepath))
+        stats_list.append(process_file(filepath, outpath, brackets))
+
+    return stats_list
+
+
+def main(
+    data_dir: str = DATA_DIR,
+    out_dir: str = OUT_DIR,
+    max_files: int = None,
+    chunk_size: int = CHUNK_SIZE,
+    single: bool = False,
+    threshold: float = None,
+):
     os.makedirs(out_dir, exist_ok=True)
 
     filepaths = sorted(
         [os.path.join(data_dir, filepath) for filepath in os.listdir(data_dir) if filepath.endswith(".warc.wet.gz")]
     )
 
-    # random.seed(42)
+    random.seed(42)
     random.shuffle(filepaths)
 
-    positives = []
+    if max_files is not None:
+        filepaths = filepaths[:max_files]
 
-    for filepath in tqdm(filepaths[:max_files], desc="Files"):
-        with open(filepath) as f:
-            docs = f.read().split("\n\n---END_OF_DOC---\n\n")
-            docs = [doc for doc in docs if doc.strip()]
+    is_bracketed = threshold is None
+    if is_bracketed:
+        # Min confidence -> n_repeats
+        brackets = {0.9: 6, 0.75: 4, 0.5: 3, 0.3: 2, 0.1: 1, 0.0: 0}
+    else:
+        brackets = {threshold: 1, 0.0: 0}
 
-            # for doc in tqdm(docs, desc="Docs in file"):
-            for doc in docs:
-                label, conf = classify_c4_100(doc)
-                pos_score = conf if label == "positive" else 1 - conf
+    executor = submitit.AutoExecutor(folder="/data/c-sniderb/a4-leaderboard/slurm_logs")
+    max_simultaneous_jobs = 16
+    executor.update_parameters(
+        slurm_array_parallelism=max_simultaneous_jobs,
+        timeout_min=10,
+        mem_gb=4,
+        cpus_per_task=1,
+        slurm_account="student",
+        slurm_partition="a4-cpu",
+        slurm_qos="a4-cpu-qos",
+    )
 
-                # n_repeats = (
-                #     6
-                #     if pos_score > 0.95
-                #     else 4
-                #     if pos_score > 0.8
-                #     else 3
-                #     if pos_score > 0.5
-                #     else 2
-                #     if pos_score > 0.3
-                #     else 1
-                #     if pos_score > 0.1
-                #     else 0
-                # )
+    stats_list = []
 
-                # if n_repeats == 0:
-                #     continue
+    if single:
+        for filepath in tqdm(filepaths, desc="Files"):
+            outpath = os.path.join(out_dir, os.path.basename(filepath))
+            stats_list.append(process_file(filepath, outpath, brackets))
+    else:
+        futures = []
 
-                n_repeats = 1
+        with executor.batch():
+            for i in range(0, len(filepaths), chunk_size):
+                chunk = filepaths[i : i + chunk_size]
+                future = executor.submit(process_file_chunk, chunk, out_dir, brackets)
+                futures.append(future)
 
-                if pos_score < 0.9:
-                    continue
+        for future in tqdm(submitit.helpers.as_completed(futures), total=len(futures)):
+            out = future.result()
+            stats_list.extend(out)
 
-                token_count = len(TOKENIZER.encode(doc))
+    stats = {}
+    for s in stats_list:
+        stats = deep_add_merge(stats, s)
 
-                for _ in range(n_repeats):
-                    positives.append(
-                        {
-                            "doc": doc,
-                            "conf": pos_score,
-                            "token_count": token_count,
-                        }
-                    )
-
-    for positive in positives:
-        print(f"Token count: {positive['token_count']} | Confidence: {positive['conf']}")
-
-        if len(positive["doc"]) > 200:
-            start = random.randint(0, len(positive["doc"]) - 200)
-            print(positive["doc"][start : start + 200])
-        else:
-            print(positive)
-
-    tokens_per_file = sum([positive["token_count"] for positive in positives]) / max_files
-    print("-" * 100)
-    print(f"Tokens per file: {tokens_per_file:,}")
-    print(f"Est. total tokens: {tokens_per_file * 5000:,}")
+    with open(os.path.join(out_dir, "stats.json"), "w") as fin:
+        json.dump(stats, fin, indent=4)
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--max_files", type=int, default=MAX_FILES)
+    parser.add_argument("--chunk_size", type=int, default=CHUNK_SIZE)
+    parser.add_argument("--data_dir", type=str, default=DATA_DIR)
+    parser.add_argument("--out_dir", type=str, default=OUT_DIR)
+    parser.add_argument("--single", action="store_true")
+    parser.add_argument("--thresholded", action="store_true")
+    parser.add_argument("--threshold", type=float, default=None)
+    args = parser.parse_args()
+
+    if args.thresholded:
+        threshold = args.threshold or 0.1
+
+    main(
+        data_dir=args.data_dir,
+        out_dir=args.out_dir,
+        max_files=args.max_files,
+        chunk_size=args.chunk_size,
+        single=args.single,
+        threshold=args.threshold,
+    )

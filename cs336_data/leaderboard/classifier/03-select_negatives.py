@@ -3,32 +3,23 @@ import os
 
 from tqdm import tqdm
 
-data_dir = "/data/c-sniderb/a4-leaderboard/lang-gopher"
+data_dir = "/data/c-sniderb/a4-leaderboard/lang-gopher-exact-deduped"
 out_dir = os.path.join(data_dir, "..", "classifier")
 tmp_dir = os.path.join(out_dir, "tmp-neg")
 out_path = os.path.join(out_dir, "negatives.txt")
 
 
 def main():
-    all_filepaths = os.listdir(data_dir)
-    meta_filepaths = set([filepath for filepath in all_filepaths if filepath.endswith(".meta.json")])
-
-    data_filepaths = [
-        os.path.join(data_dir, filepath)
-        for filepath in all_filepaths
-        if filepath.endswith(".warc.wet.gz") and f"{filepath}.meta.json" in meta_filepaths
-    ]
-
-    examples = []
-
+    data_filepaths = [os.path.join(data_dir, filepath) for filepath in os.listdir(data_dir)]
     chosen_paths = random.sample(data_filepaths, 300)
+    examples = []
 
     for data_filepath in tqdm(chosen_paths, desc="Processing files"):
         with open(data_filepath) as f:
             docs = f.read().split("\n\n---END_OF_DOC---\n\n")
             docs = [doc for doc in docs if doc.strip()]
 
-            chosen_docs = random.sample(docs, 40)
+            chosen_docs = random.sample(docs, 60)
 
             examples.extend(chosen_docs)
 

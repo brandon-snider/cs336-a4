@@ -1,3 +1,7 @@
+"""
+Filter pages and lines using the C4 and Gopher quality heuristics.
+"""
+
 import argparse
 import json
 import os
@@ -8,63 +12,56 @@ import pathlib
 import submitit
 import concurrent.futures
 
-from fastwarc.warc import ArchiveIterator
-from cs336_data.extract_text import bytes_to_unicode
-from cs336_data.language_identification import identify_language
+from cs336_data.harmful_content import classify_nsfw, classify_toxic_speech
 
-OUTDIR = "/data/c-sniderb/a4-leaderboard/01-english"
-DATA_DIR = "/data/CC"
+# DATA_DIR = "/data/c-sniderb/a4-leaderboard/02-heuristics"
+DATA_DIR = "/data/c-sniderb/a4-leaderboard/heuristics"
+OUTDIR = "/data/c-sniderb/a4-leaderboard/03-safety"
 
 
-def process_wet_file(input_path: str, output_path: str, progress: bool = False):
-    total_docs = 0
-    accepted_docs = []
+def process_file(input_path: str, output_path: str, progress: bool = False):
+    accepted_docs_count = 0
+    rejected_docs = {"nsfw": 0, "toxic": 0}
 
-    rejected_docs = {
-        "language": [],
-    }
+    with open(output_path, "w") as fout:
+        with open(input_path) as fin:
+            docs = fin.read().split("\n\n---END_OF_DOC---\n\n")
 
-    with open(output_path, "w") as accepted_file:
-        t0 = time.time()
-        for record in ArchiveIterator(open(input_path, "rb")):
-            total_docs += 1
-            if total_docs % 1000 == 0 and progress:
-                t1 = time.time()
-                time_per_doc_ms = (t1 - t0) / total_docs * 1000
-                print(
-                    f"Processed {total_docs} records | {len(accepted_docs)} accepted | {len(rejected_docs['language'])} rejected (language) | {time_per_doc_ms:.2f}ms/doc",
-                    end="\r",
-                )
+            for doc in tqdm(docs, total=len(docs), desc="Processing documents", disable=not progress):
+                nsfw_label, nsfw_conf = classify_nsfw(doc)
+                non_nsfw_conf = nsfw_conf if nsfw_label == "non-nsfw" else 1 - nsfw_conf
+                if non_nsfw_conf < 0.9:
+                    rejected_docs["nsfw"] += 1
+                    continue
 
-            text = bytes_to_unicode(record.reader.read())
+                toxic_label, toxic_conf = classify_toxic_speech(doc)
+                non_toxic_conf = toxic_conf if toxic_label == "non-toxic" else 1 - toxic_conf
+                if non_toxic_conf < 0.8:
+                    rejected_docs["toxic"] += 1
+                    continue
 
-            lang, score = identify_language(text)
+                accepted_docs_count += 1
 
-            if lang != "en" or score < 0.85:
-                rejected_docs["language"].append([record.record_id, lang, score])
-                continue
+                fout.write(doc + "\n\n---END_OF_DOC---\n\n")
 
-            accepted_file.write(text + "\n\n---END_OF_DOC---\n\n")
-            accepted_docs.append(record.record_id)
+    rejected_docs_count = sum(rejected_docs.values())
+    total_docs = accepted_docs_count + rejected_docs_count
 
     meta = {
         "total_docs": total_docs,
-        "accepted_ct": len(accepted_docs),
-        "accepted_docs": accepted_docs,
-        "rejected_ct": sum(len(v) for v in rejected_docs.values()),
-        "rejected_by_type": {
-            "language": len(rejected_docs["language"]),
+        "accepted_docs_ct": accepted_docs_count,
+        "rejected_docs_ct": rejected_docs_count,
+        "rejected_docs_by_type": {
+            "nsfw": rejected_docs["nsfw"],
+            "toxic": rejected_docs["toxic"],
         },
-        "rejected_docs": rejected_docs,
     }
 
     meta_outpath = f"{output_path}.meta.json"
     with open(meta_outpath, "w") as f:
         json.dump(meta, f, indent=4)
 
-    short_meta = {k: v for k, v in meta.items() if k not in ["accepted_docs", "rejected_docs"]}
-
-    return output_path, meta_outpath, short_meta
+    return output_path, meta_outpath, meta
 
 
 def main(
@@ -75,7 +72,7 @@ def main(
     wait: bool = True,
     mp: bool = False,
 ):
-    # random.seed(42)
+    random.seed(42)
 
     os.makedirs(outdir, exist_ok=True)
 
@@ -102,13 +99,12 @@ def main(
 
     if single:
         for wfp in tqdm(wet_filepaths, total=len(wet_filepaths)):
-            output_file, meta_outpath, short_meta = process_wet_file(
+            output_file, meta_outpath, meta = process_file(
                 wfp, os.path.join(outdir, str(pathlib.Path(wfp).name)), progress=True
             )
             print(f"Output file written: {output_file}")
             print(f"Meta file written: {meta_outpath}")
-            print(f"Short Meta: {short_meta}")
-
+            print(f"Meta: {meta}")
     elif mp:
         num_cpus = len(os.sched_getaffinity(0))
         print(f"Using {num_cpus} CPUs")
@@ -118,12 +114,12 @@ def main(
 
         for wfp in wet_filepaths:
             wet_filename = str(pathlib.Path(wfp).name)
-            future = executor.submit(process_wet_file, wfp, os.path.join(outdir, wet_filename), progress=False)
+            future = executor.submit(process_file, wfp, os.path.join(outdir, wet_filename), progress=False)
             futures.append(future)
 
         if wait:
             for future in tqdm(futures, total=len(wet_filepaths)):
-                output_file, meta_outpath, short_meta = future.result()
+                output_file, meta_outpath, meta = future.result()
 
     else:
         executor = submitit.AutoExecutor(folder="/data/c-sniderb/a4-leaderboard/slurm_logs")
@@ -144,7 +140,7 @@ def main(
         with executor.batch():
             for wfp in wet_filepaths:
                 wet_filename = str(pathlib.Path(wfp).name)
-                future = executor.submit(process_wet_file, wfp, os.path.join(outdir, wet_filename))
+                future = executor.submit(process_file, wfp, os.path.join(outdir, wet_filename))
                 futures.append(future)
 
         if wait:

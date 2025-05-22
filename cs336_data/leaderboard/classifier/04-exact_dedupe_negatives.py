@@ -1,5 +1,5 @@
 import os
-from cs336_data.exact_deduplication import exact_line_dedupe
+from cs336_data.exact_deduplication import exact_line_dedupe_docs
 from tqdm import tqdm
 
 DATA_DIR = "/data/c-sniderb/a4-leaderboard/classifier/tmp-neg"
@@ -10,7 +10,7 @@ def main(data_dir: str = DATA_DIR, outdir: str = OUTDIR):
     os.makedirs(outdir, exist_ok=True)
     filepaths = [os.path.join(data_dir, f) for f in os.listdir(data_dir)]
     print(f"Exact deduping {len(filepaths)} files")
-    exact_line_dedupe(filepaths, outdir, progress=True)
+    exact_line_dedupe_docs(filepaths, outdir, progress=True)
 
     # Remove empty files from outdir
     removals = 0

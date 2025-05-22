@@ -8,7 +8,7 @@ OUT_DIR = os.path.join(DATA_DIR, "classifier")
 OUT_PATH = os.path.join(OUT_DIR, "positives.txt")
 
 
-def main(data_path: str = DATA_PATH, out_dir: str = OUT_DIR, out_path: str = OUT_PATH, num_examples: int = 10000):
+def main(data_path: str = DATA_PATH, out_dir: str = OUT_DIR, out_path: str = OUT_PATH, num_examples: int = 14000):
     with open(data_path) as f:
         docs = f.read().split("\n\n---END_OF_DOC---\n\n")
     docs = [doc for doc in docs if doc.strip()]
@@ -27,6 +27,6 @@ def main(data_path: str = DATA_PATH, out_dir: str = OUT_DIR, out_path: str = OUT
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--num-examples", type=int, default=10000)
+    parser.add_argument("--num-examples", type=int, default=14000)
     args = parser.parse_args()
     main(num_examples=args.num_examples)

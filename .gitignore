@@ -1,3 +1,7 @@
+cs336-basics/output/
+cs336-basics/outputs/
+cs336-basics/wandb/
+
 CC-MAIN-2023-50/
 *.bin
 

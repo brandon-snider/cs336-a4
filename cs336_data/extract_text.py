@@ -7,3 +7,9 @@ def extract_text_from_html_bytes(html_bytes: bytes) -> str:
     unicode_text = html_bytes.decode(encoding, errors="ignore")
     text = extract_plain_text(unicode_text)
     return text
+
+
+def bytes_to_unicode(seq: bytes) -> str:
+    encoding = detect_encoding(seq)
+    unicode_text = seq.decode(encoding, errors="ignore")
+    return unicode_text

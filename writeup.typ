@@ -293,6 +293,170 @@
 
 + See `cs336_data/quality_classifier.py`
 
+= 3 Deduplication
+
 == Problem (`exact_deduplication`): 3 points
 
 + See `cs336_data/exact_deduplication.py`
+
+== Problem (`minhash_deduplication`): 8 points
+
++ See `cs336_data/minhash_deduplication.py`
+
+= 4 Leaderboard: filter data for language modeling
+
+== Problem (`filter_data`): 6 points
+
++ See `cs336_data/leaderboard/*`
+
+  Proportion of examples removed at each step:
+
+  #figure(tablem[
+  | Step | Removed (% of total) | Removed (% of remaining) |
+  |------|---------------------|---------------------|
+  | p(English) > 0.85 | 85.97 | 85.97 |
+  | Gopher filters | 3.26 | 23.25 |
+  | Exact line deduplication | 2.03 | 18.85 |
+  | Validation set classifier | 6.89 | 78.84 |
+  ], caption: "Proportion of examples removed at each step")
+
++ Time to filter 5,000 CC WET files:
+
+  #figure(tablem[
+  | Step | Time (minutes) |
+  |------|----------|
+  | p(English) > 0.85 + Gopher filters | 475 |
+  | Exact line deduplication | 30 |
+  | Validation set classifier | 22 |
+  | Total | 527 |
+  ], caption: "Time to filter 5,000 CC WET files")
+
+  Estimated time to filter 100k CC WET files: 10,540 minutes (~176 hours or 7.3 days)
+
+== Problem (`inspect_filtered_data`): 4 points
+
++ Positive Example 1:
+
+  - Quote:
+
+    #quote("...His research laboratories have trained medical students, residents, and fellows in these MRI techniques and trained MS and PhD students from biomedical, electrical, and computer science engineering to become the next generation of MR physicists. Dr. Faro has an international reputation as an expert neuroradiologist and pioneer in clinical functional neuroradiology...", block: true)
+
+  - Comment:
+  
+    This is a high-quality example that is certainly worthwhile to use for language modeling in this context. It is well-written English that is both structurally and semantically sound.
+  
+  Positive Example 2:
+
+  - Quote:
+
+    #quote("...With Sanias serve broken after a long sequence of deuce and advantage points, the Americans began hooping around the court energetically.Rajeev kept his end of the bargain up by locking out the Indians from any opportunities to break his serve. His fluid single hander backhand was in fine working fettle on the night and provided some sparkling moments with passes past desperate racquets.Venus, too, had transformed by this time into the player who owns seven singles and sixteen Grand Slam doubles titles....", block: true)
+
+  - Comment:
+
+    This example is not ideal, though is probably still useful. There are some misspellings (e.g. "hooping" instead of "hopping"), some formatting errors, and it is not quite a semantically coherent as the previous one.
+
+  Positive Example 3:
+
+  - Quote:
+
+    #quote("...Once children are in school, they spend one year in sheltered classes focused on learning German. Students who do not have basic literacy spend an additional year in those classes. After these 1-2 years of sheltered instruction, students are integrated into mainstream classes. This sheltered approach is relatively uniform across Germany. With the large numbers of students and the focus on sheltered instruction in Germany, we wondered what Canadian educators could learn from the German situation. ...", block: true)
+
+  - Comment:
+
+    This is another high-quality example. It seems as structurally and semantically sound as the first, but covers different topics, and I would certainly want to train on it in this context.
+
+  Positive Example 4:
+
+  - Quote:
+
+    #quote("...Welcome to Zivame! You will receive a one-time SMS to download the app Phone number: Send me the app By providing your phone number, you agree to receive a one-time automated text message with a link to get the app. Standard messaging rates may apply. ...", block: true)
+
+  - Comment:
+
+    This is a fairly low-quality example. It is essentially spam and is not entirely coherent. Training on this is not ideal.
+
+  Positive Example 5: 
+
+  - Quote:
+
+    #quote("...The finalists will then submit their full dissertations for further review and selection. Obligations for Finalists Being selected as a finalist is an honor. Finalists are required to present their dissertations at a specially designed session during the 2018 AOM Annual Meeting in Chicago, Illinois....", block: true)
+
+  - Comment:
+
+    This is another mostly well-formed, coherent example covering a different subject area, and I would be happy to train on this.
+
++ Negative Example 1:
+
+  - Quote:
+
+    #quote("...[저녁출발][ZE561편] 나트랑 에어텔 / 3박5일 / 윈덤가든 깜란 / 이스타항공 | 윈덤가든 깜란 | 나트랑 | ::: 에어텔닷컴 ::: 에닷 라이브 4월16일(수) 오후 8시 모벤픽 리조트 vs 멜리아빈펄 리조트 푸꾸옥 에어텔 5/6일 보러가기 로그인/회원가입 1:1문의 최근 검색 전체삭제 지역을 선택해 주세요 베트남 필리핀 태국 일본 나트랑/달랏 다낭/호이안/후에 푸꾸옥 마닐라/코론 보라카이 보홀 세부 방콕 치앙마이 파타야 푸켓 대마도 도쿄 마쓰야마 오사카 오키나와 후쿠오카 히로....", block: true)
+
+  - Comment:
+
+    This example was appropriately removed by the language classifier.
+
+  Negative Example 2:
+
+  - Quote:
+
+    #quote("...Registration fees for Transfer Up to $85,000 $210.30 $85,001 - $120,000 $220.30 $120,001 - $200,000 $240.30 $200,001 - $300,000 $260.30 $300,001 - $400,000 $280.30 $400,001 - $500,000 $300.30 $500,001 - $600,000 $320.30 $600,001 - $700,000 $340.30 $700,001 - $800,000 $360.30 $800,001 - $900,000 $380.30 $900,001 - $1,000,000 $400.30 $1,000,001 - $1,100,000 $420.30 $1,100,001 - $1,200,000 $440.30 $1,200,001 - $1,300,000 $460.30 $1,300,001 - $1,400,000 $480.30 $1,400,001 - $1,500,000 $500.30 $1,500,001 - $1,600,000 $520.30 $1,600,001 - $1,700,000 $540.30 $1,700,001 - $1,800,000 $560.30 $1,800,001 - $1,900,000 $580.30 $1,900,001 - $2,000,000 $600.30 Over $2,000,000 - $600.30 plus $20 for every $100,000 or part thereof.....", block: true)
+
+  - Comment:
+
+    This examples was removed by the Gopher filters, for having too few tokens with at least one alphabetic character. In this context (seeking to minimize validation loss on c4_100_domains from Paloma), this seems reasonable, as there's little semantic or structural learning to be done from this example.
+
+  Negative Example 3:
+
+  - Quote:
+
+    #quote("Sign in to your account", block: true)
+
+  - Comment:
+
+    This was not a full example, but a line that was removed during exact line deduplication. This makes sense, as the line is common boilerplate, has little semantic or structural information content, and is not representative of the target domains.
+
+  Negative Example 4:
+
+  - Quote:
+
+    #quote("This site requires JavaScript to run. Please make sure you are using a modern browser and JavaScript is activated. Horned Frogs Connect", block: true)
+
+  - Comment:
+
+    This example was removed by the Gopher filters for having too few tokens. This seems appropriate, particularly in the context of minimizing validation loss on c4_100_domains from Paloma. The example has low informational content and is not representative of the target domains.
+
+  Negative Example 5:
+
+  - Quote:
+
+    #quote("Email Protection | Cloudflare Please enable cookies. Email Protection You are unable to access this email address duroujian.shop The website from which you got to this page is protected by Cloudflare. Email addresses on that page have been hidden in order to keep them from being accessed by malicious bots. You must enable Javascript in your browser in order to decode the e-mail address. If you have a website and are interested in protecting it in a similar way, you can sign up for Cloudflare. How does Cloudflare protect email addresses on website from spammers? Can I sign up for Cloudflare? Cloudflare Ray ID: 936c92ebbe6e0809 • Your IP: Click to reveal 18.97.14.83 • Performance & security by Cloudflare", block: true)
+
+  - Comment:
+
+    This example was removed by the fastText classifier that I trained using my filtered subset as negative examples, and the validation set as positive examples. This is interesting because the example looks structurally acceptable, but semantically is not that useful for modeling the target distribution. Though no conclusions can be drawn from one example, more such examples would indicate that the classifier has actually learned to distinguish usefully between the target distribution and random examples from my filtered subset.
+
++ Some observations and subsequent changes:
+
+  - The overwhelming majority (>95%) of docs in the validation set are classified as English with p > 0.85. Because the language classifier is quite efficient, I took advantage of this fact to fairly quickly filter out CC docs that don't meet this criterion, which turns out to be >85% of them.
+
+  - Almost all docs in the validation set pass the Gopher quality filters, but many raw CC docs don't (including ~25% of those classified as English with p > 0.85). I therefore used the Gopher filters in my initial round of filtering.
+
+  - Using the NSFW and toxicity classifiers on all docs with p(English) >  0.85 slows down filtering by ~30-40%. As a proportion, there are almost no documents that are English, pass the Gopher filters, and are still NSFW or toxic. In a setting where we really cared about harmfulness in downstream interactions, using these filters might be worth it. In this setting, I dropped them.
+
+  - My final classifier (filtered subset as negatives; validation set as positives) seems to work fairly well. After inspecting randomly sampled examples in different score ranges (e.g. >0.9, >0.8, etc.), the subjective quality does appear to degrade roughly as the score decreases. As a result, I chose to bucket examples by their scores, and repeat examples some number of times, based on the score (higher score -> more repeats; details in the leaderboard section).
+
+== Problem (`tokenize_data`): 2 points
+
+See `cs336_data/leaderboard/05-tokenize.py`
+
+Number of tokens in produced dataset: 6,377,480,404
+
+== Problem (`train_model`): 2 points
+
+Best validation loss: [TODO]
+
+Associated learning curve: [TODO]
+
+What I did:
+
+[TODO]
