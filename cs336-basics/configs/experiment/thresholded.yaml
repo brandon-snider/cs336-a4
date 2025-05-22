@@ -1,0 +1,14 @@
+# @package _global_
+
+paths:
+  # Set to your data, tokenized with GPT-2 tokenizer!
+  train_bin: /data/c-sniderb/a4-leaderboard/tokenized-thresholded.bin
+  
+  # The validation set which we have already tokenized with GPT-2 tokenizer, don't change this!
+  valid_bin: /data/paloma/tokenized_paloma_c4_100_domains_validation.bin
+  
+  model_output: output/thresholded
+
+training:
+  wandb_entity: brandon-snider-stanford-university
+  wandb_project: cs336-a4
