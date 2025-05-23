@@ -33,7 +33,7 @@ def deep_add_merge(a, b):
     return a
 
 
-def process_file(inpath: str, outpath: str, brackets: dict[float, int]):
+def process_file(inpath: str, outpath: str, brackets: dict[float, int], tokenize: bool = False):
     stats = {}
     for min_conf, n_repeats in brackets.items():
         stats[min_conf] = {
@@ -59,9 +59,10 @@ def process_file(inpath: str, outpath: str, brackets: dict[float, int]):
             stats[min_conf]["unique_docs_count"] += 1
             stats[min_conf]["docs_count"] += n_repeats
 
-            # token_count = len(TOKENIZER.encode(doc))
-            # stats[min_conf]["unique_tokens_count"] += token_count if n_repeats > 0 else 0
-            # stats[min_conf]["tokens_count"] += n_repeats * token_count
+            if tokenize:
+                token_count = len(TOKENIZER.encode(doc))
+                stats[min_conf]["unique_tokens_count"] += token_count if n_repeats > 0 else 0
+                stats[min_conf]["tokens_count"] += n_repeats * token_count
 
             for _ in range(n_repeats):
                 fout.write(doc + "\n\n---END_OF_DOC---\n\n")
@@ -69,7 +70,7 @@ def process_file(inpath: str, outpath: str, brackets: dict[float, int]):
     return stats
 
 
-def process_file_chunk(filepaths: list[str], out_dir: str, brackets: dict[float, int]):
+def process_file_chunk(filepaths: list[str], out_dir: str, brackets: dict[float, int], tokenize: bool = False):
     stats_list = []
 
     for filepath in filepaths:
@@ -87,6 +88,7 @@ def main(
     single: bool = False,
     mp: bool = False,
     threshold: float = None,
+    tokenize: bool = False,
 ):
     os.makedirs(out_dir, exist_ok=True)
 
@@ -112,7 +114,7 @@ def main(
     if single:
         for filepath in tqdm(filepaths, desc="Files"):
             outpath = os.path.join(out_dir, os.path.basename(filepath))
-            stats_list.append(process_file(filepath, outpath, brackets))
+            stats_list.append(process_file(filepath, outpath, brackets, tokenize=tokenize))
     elif mp:
         num_cpus = len(os.sched_getaffinity(0))
         print(f"Using {num_cpus} CPUs")
@@ -122,7 +124,11 @@ def main(
 
         for filepath in filepaths:
             future = executor.submit(
-                process_file, filepath, os.path.join(out_dir, os.path.basename(filepath)), brackets
+                process_file,
+                filepath,
+                os.path.join(out_dir, os.path.basename(filepath)),
+                brackets,
+                tokenize=tokenize,
             )
             futures.append(future)
 
@@ -147,7 +153,7 @@ def main(
         with executor.batch():
             for i in range(0, len(filepaths), chunk_size):
                 chunk = filepaths[i : i + chunk_size]
-                future = executor.submit(process_file_chunk, chunk, out_dir, brackets)
+                future = executor.submit(process_file_chunk, chunk, out_dir, brackets, tokenize=tokenize)
                 futures.append(future)
 
         for future in tqdm(submitit.helpers.as_completed(futures), total=len(futures)):
@@ -182,6 +188,7 @@ if __name__ == "__main__":
     parser.add_argument("--thresholded", action="store_true")
     parser.add_argument("--threshold", type=float, default=None)
     parser.add_argument("--mp", action="store_true")
+    parser.add_argument("--tokenize", action="store_true")
     args = parser.parse_args()
 
     if args.thresholded:
@@ -195,4 +202,5 @@ if __name__ == "__main__":
         single=args.single,
         mp=args.mp,
         threshold=args.threshold,
+        tokenize=args.tokenize,
     )

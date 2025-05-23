@@ -1,6 +1,4 @@
-"""
-Filter pages and lines using the C4 and Gopher quality heuristics.
-"""
+"""Filter pages and lines using the C4 and Gopher quality heuristics."""
 
 import argparse
 import json
@@ -14,14 +12,15 @@ import concurrent.futures
 from cs336_data.c4_quality_filters import c4_quality_filter
 from cs336_data.gopher_quality_filters import gopher_quality_filter
 
-# from transformers import AutoTokenizer
-# TOKENIZER = AutoTokenizer.from_pretrained("gpt2")
+from transformers import AutoTokenizer
+
+TOKENIZER = AutoTokenizer.from_pretrained("gpt2")
 
 DATA_DIR = "/data/c-sniderb/a4-leaderboard/01-english"
 OUTDIR = "/data/c-sniderb/a4-leaderboard/02-heuristics"
 
 
-def process_file(input_path: str, output_path: str, progress: bool = False):
+def process_file(input_path: str, output_path: str, progress: bool = False, tokenize: bool = False):
     accepted_docs_count = 0
     rejected_docs = {"blacklisted": 0, "no_lines_kept": 0, "gopher": 0, "nsfw": 0, "toxic": 0}
 
@@ -44,7 +43,8 @@ def process_file(input_path: str, output_path: str, progress: bool = False):
         for doc in tqdm(docs, total=len(docs), desc="Processing documents", disable=not progress):
             is_c4_quality, filtered_doc, metadata = c4_quality_filter(doc)
 
-            # tokens["total"] += len(TOKENIZER.encode(doc))
+            if tokenize:
+                tokens["total"] += len(TOKENIZER.encode(doc))
 
             if not is_c4_quality:
                 if metadata["reason"] == "blacklisted":
@@ -58,8 +58,9 @@ def process_file(input_path: str, output_path: str, progress: bool = False):
                 rejected_docs["gopher"] += 1
                 continue
 
-            # tokens["kept"] += len(TOKENIZER.encode(filtered_doc))
-            # tokens["rejected"] = tokens["total"] - tokens["kept"]
+            if tokenize:
+                tokens["kept"] += len(TOKENIZER.encode(filtered_doc))
+                tokens["rejected"] = tokens["total"] - tokens["kept"]
 
             accepted_docs_count += 1
             accepted_lines_count += metadata["line_meta"]["kept"]
@@ -106,6 +107,7 @@ def main(
     data_dir: str = DATA_DIR,
     wait: bool = True,
     mp: bool = False,
+    tokenize: bool = False,
 ):
     random.seed(42)
 
@@ -135,7 +137,10 @@ def main(
     if single:
         for wfp in tqdm(wet_filepaths, total=len(wet_filepaths)):
             output_file, meta_outpath, meta = process_file(
-                wfp, os.path.join(outdir, str(pathlib.Path(wfp).name)), progress=True
+                wfp,
+                os.path.join(outdir, str(pathlib.Path(wfp).name)),
+                progress=True,
+                tokenize=tokenize,
             )
             print(f"Output file written: {output_file}")
             print(f"Meta file written: {meta_outpath}")
@@ -149,7 +154,13 @@ def main(
 
         for wfp in wet_filepaths:
             wet_filename = str(pathlib.Path(wfp).name)
-            future = executor.submit(process_file, wfp, os.path.join(outdir, wet_filename), progress=False)
+            future = executor.submit(
+                process_file,
+                wfp,
+                os.path.join(outdir, wet_filename),
+                progress=False,
+                tokenize=tokenize,
+            )
             futures.append(future)
 
         if wait:
@@ -175,11 +186,16 @@ def main(
         with executor.batch():
             for wfp in wet_filepaths:
                 wet_filename = str(pathlib.Path(wfp).name)
-                future = executor.submit(process_file, wfp, os.path.join(outdir, wet_filename))
+                future = executor.submit(
+                    process_file,
+                    wfp,
+                    os.path.join(outdir, wet_filename),
+                    progress=False,
+                    tokenize=tokenize,
+                )
                 futures.append(future)
 
         if wait:
-            # Iterate over completed futures as they finish, using a progress bar to keep track
             for future in tqdm(
                 submitit.helpers.as_completed(futures),
                 total=len(wet_filepaths),
@@ -195,6 +211,7 @@ if __name__ == "__main__":
     parser.add_argument("--data-dir", type=str, default=DATA_DIR, help="Data directory")
     parser.add_argument("--no-wait", action="store_true", help="Whether to wait for the jobs to finish")
     parser.add_argument("--mp", action="store_true", help="Whether to use multiple processes")
+    parser.add_argument("--tokenize", action="store_true", help="Whether to tokenize the text")
     args = parser.parse_args()
 
     wait = not args.no_wait
@@ -206,4 +223,5 @@ if __name__ == "__main__":
         data_dir=args.data_dir,
         wait=wait,
         mp=args.mp,
+        tokenize=args.tokenize,
     )
