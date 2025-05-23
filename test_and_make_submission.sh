@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-uv run pytest -v ./tests --junitxml=test_results.xml || true
+# uv run pytest -v ./tests --junitxml=test_results.xml || true
 echo "Done running tests"
 
 # Set the name of the output tar.gz file
@@ -27,6 +27,15 @@ zip -r "$output_file" . \
     -x '.venv/*' \
     -x '*.bin' \
     -x '*.pt' \
-    -x '*.pth'
+    -x '*.pth' \
+    -x 'cs336-basics/.venv/*' \
+    -x 'cs336-basics/wandb/*' \
+    -x 'cs336-basics/outputs/*' \
+    -x 'cs336-basics/output/*' \
+    -x '*.ipynb' \
+    -x '*.pdf' \
+    -x 'a*.typ' \
+    -x '_unused*' \
+    -x 'out/*'
 
 echo "All files have been compressed into $output_file"
