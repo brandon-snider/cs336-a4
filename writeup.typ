@@ -389,11 +389,11 @@
 
   - Quote:
 
-    #quote("...[저녁출발][ZE561편] 나트랑 에어텔 / 3박5일 / 윈덤가든 깜란 / 이스타항공 | 윈덤가든 깜란 | 나트랑 | ::: 에어텔닷컴 ::: 에닷 라이브 4월16일(수) 오후 8시 모벤픽 리조트 vs 멜리아빈펄 리조트 푸꾸옥 에어텔 5/6일 보러가기 로그인/회원가입 1:1문의 최근 검색 전체삭제 지역을 선택해 주세요 베트남 필리핀 태국 일본 나트랑/달랏 다낭/호이안/후에 푸꾸옥 마닐라/코론 보라카이 보홀 세부 방콕 치앙마이 파타야 푸켓 대마도 도쿄 마쓰야마 오사카 오키나와 후쿠오카 히로....", block: true)
+    #quote("...Herzlich willkommen - Zügelkönig - Umzug in Zürich Willkommen Umzug Privatumzug Firmenumzug Umzugscheckliste Entsorgungen Reinigung Wohnungsreinigung Endreinigung Firmen Fassadenreinigung Bewertungen Preise Über uns Team Kontakt AGB’s Herzlich willkommen Home Ihre Offerte in 2 Minuten !....", block: true)
 
   - Comment:
 
-    This example (in Korean) was appropriately removed by the language classifier.
+    This example (in German) was appropriately removed by the language classifier.
 
   Negative Example 2:
 
@@ -511,7 +511,7 @@ I estimated that we'd require \~6.5B training tokens based on the training confi
 
   The thresholds were chosen to (i) roughly balance the number of examples passing each threshold (counting repeats), (ii) retain \~6.5B total tokens. Truthfully, this is just for lack of a more principled way of doing it.
 
-  I found it interesting that, in the final run, the training loss and validation loss were within noise distance of each other from start to finish, suggesting that (i) the distributions are similar, (ii) the repetition of examples with high scores did not cause problematic overfitting.
+  I found it interesting that, in the final run, the training loss and validation loss were within noise distance of each other from start to finish. I think this suggests that (i) the distributions are similar, (ii) the repetition of examples with high scores did not cause problematic overfitting.
 
 = Appendix
 

@@ -5,7 +5,7 @@ Drop pages with:
 - Document-level blacklisted content: "lorem ipsum", "{" (rare in non-code pages)
 
 Note: we don't drop documents with fewer than 3 sentences, unlike the paper
-- We assume that these will be caught by the Gopher filters (>50 tokens)
+- We later drop documents with fewer than 50 tokens
 
 Drop lines with:
 - Non-punctuation terminators

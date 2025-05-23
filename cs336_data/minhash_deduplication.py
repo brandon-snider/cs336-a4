@@ -1,4 +1,3 @@
-from collections import OrderedDict
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from functools import partial
 import multiprocessing
@@ -9,7 +8,6 @@ import shutil
 import mmh3
 import numpy as np
 import unicodedata
-import pickle
 from tqdm import tqdm
 
 WS_RE = re.compile(r"\s+")
@@ -65,7 +63,7 @@ def collect_signatures(
     progress: bool = False,
 ):
     signatures = {}
-    with ProcessPoolExecutor(max_workers=multiprocessing.cpu_count()) as pool:
+    with ProcessPoolExecutor(max_workers=len(os.sched_getaffinity(0))) as pool:
         submit = partial(pool.submit, build_signature, ngrams=ngrams, num_hashes=num_hashes)
         futures = [submit(p) for p in input_files]
         for future in tqdm(as_completed(futures), total=len(futures), disable=not progress, desc="Building signatures"):
@@ -87,7 +85,7 @@ def collect_ngram_sets(
 ):
     """Parallel map: file → n‑gram set. Yields (path, set) tuples."""
     ngram_sets = {}
-    with ProcessPoolExecutor(max_workers=multiprocessing.cpu_count()) as pool:
+    with ProcessPoolExecutor(max_workers=len(os.sched_getaffinity(0))) as pool:
         submit = partial(pool.submit, build_ngram_set, ngrams=ngrams)
         futures = [submit(p) for p in files]
         for future in tqdm(
@@ -110,15 +108,11 @@ def minhash_dedupe(
     if not os.path.exists(output_directory):
         os.makedirs(output_directory)
 
-    # Index of minhash band -> list of filepaths with a matching band
-    bands: dict[tuple[int, ...], list[os.PathLike]] = {}
-
-    # Set of pairs of filenames of files that are candidate duplicates based on minhash bands
-    candidate_dups: set[tuple[os.PathLike, os.PathLike]] = set()
-
+    bands: dict[tuple[int, ...], list[os.PathLike]] = {}  # Band -> list of files with that band
+    candidate_dups: set[tuple[os.PathLike, os.PathLike]] = set()  # Set of pairs of files that are candidate duplicates
     signatures = collect_signatures(input_files, ngrams=ngrams, num_hashes=num_hashes, progress=progress)
 
-    for file, minhash in signatures:
+    for file, minhash in signatures.items():
         for band in range(num_bands):
             band_minhash = tuple(minhash[band::num_bands])
             if band_minhash not in bands:
@@ -135,7 +129,10 @@ def minhash_dedupe(
     # Map from filepath -> set of files that are in the same cluster of duplicates
     clusters: dict[os.PathLike, set[os.PathLike]] = {}
 
-    unique_files = set(f for _, f in candidate_dups)
+    unique_files = set()
+    for f1, f2 in candidate_dups:
+        unique_files.add(f1)
+        unique_files.add(f2)
     ngram_sets = collect_ngram_sets(unique_files, ngrams=ngrams, progress=progress)
 
     for f1, f2 in tqdm(candidate_dups, disable=not progress, desc="Testing + clustering"):
@@ -152,9 +149,10 @@ def minhash_dedupe(
     if progress:
         print(f"Found {len(clusters)} clusters")
 
-    # Set of clusters of duplicates
-    cluster_set: set[frozenset[os.PathLike]] = {frozenset(cluster) for cluster in clusters.values()}
-    files_to_write = [f for f in input_files if f not in clusters] + [random.choice(list(c)) for c in cluster_set]
+    # Collect unique clusters of duplicates
+    cluster_set = {frozenset(cluster) for cluster in clusters.values()}
+    files_to_write = [f for f in input_files if f not in clusters]
+    files_to_write += [random.choice(tuple(cluster)) for cluster in cluster_set]
 
     for file in tqdm(files_to_write, disable=not progress, desc="Writing output files"):
         dst = os.path.join(output_directory, os.path.basename(file))

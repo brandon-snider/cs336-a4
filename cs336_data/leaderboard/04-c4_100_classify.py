@@ -46,7 +46,6 @@ def process_file(inpath: str, outpath: str, brackets: dict[float, int]):
     with open(inpath) as fin, open(outpath, "w") as fout:
         docs = fin.read().split("\n\n---END_OF_DOC---\n\n")
 
-        # for doc in tqdm(docs, desc="Docs in file"):
         for doc in docs:
             if not doc.strip():
                 continue
@@ -104,7 +103,7 @@ def main(
     is_bracketed = threshold is None
     if is_bracketed:
         # Min confidence -> n_repeats
-        brackets = {0.84: 4, 0.72: 3, 0.56: 2, 0.35: 1, 0.0: 0}
+        brackets = {0.84: 4, 0.72: 3, 0.58: 2, 0.36: 1, 0.0: 0}
     else:
         brackets = {threshold: 1, 0.0: 0}
 

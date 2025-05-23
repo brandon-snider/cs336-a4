@@ -26,7 +26,6 @@ toxic_model = fasttext.load_model(TOXIC_MODEL_PATH)
 def classify_nsfw(text: str) -> tuple[bool, float]:
     """
     Classify text as NSFW or not.
-
     Returns a tuple of (is_nsfw, confidence)
     """
     clean = text.replace("\n", " ")
@@ -39,7 +38,6 @@ def classify_nsfw(text: str) -> tuple[bool, float]:
 def classify_toxic_speech(text: str) -> tuple[bool, float]:
     """
     Classify text as toxic speech or not.
-
     Returns a tuple of (is_toxic, confidence)
     """
     clean = text.replace("\n", " ")

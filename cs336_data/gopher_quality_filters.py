@@ -50,6 +50,5 @@ def gopher_quality_filter(text: str, verbose: bool = False) -> bool:
 
 
 if __name__ == "__main__":
-    # res = gopher_quality_filter("Hello, world!...\nSomething else.")
     text = ("This should definitely be valid input text and of high quality according to Gopher rules. ") * 100
     print(gopher_quality_filter(text))

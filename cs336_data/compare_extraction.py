@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 import argparse
 import gzip
 from cs336_data.extract_text import extract_text_from_html_bytes
